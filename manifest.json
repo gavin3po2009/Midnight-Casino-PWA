@@ -1,10 +1,11 @@
 {
   "name": "The Midnight Casino",
   "short_name": "Midnight Casino",
-  "description": "A $1,000 stake, a $250,000,000,000 promise. True odds at every table — the house takes nothing. Fictional stakes only.",
+  "description": "A $1,000 stake, a $250,000,000,000 promise. True odds — the house takes nothing. Fictional stakes only.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "orientation": "any",
   "background_color": "#0d110c",
   "theme_color": "#0d110c",
