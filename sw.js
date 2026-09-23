@@ -1,8 +1,7 @@
-/* Service Worker — STRICT offline after first successful install.
-   Once cached, the app never initiates network requests for its own assets.
-   Note: Chrome itself may still briefly check /sw.js for updates; that is
-   browser behavior and cannot be fully disabled. */
-const CACHE_NAME = 'midnight-casino-v4';
+/* Service Worker — launcher shell is strict offline;
+   same-origin game files are cache-first (cached on first visit);
+   cross-origin (GitHub API) passes through to the network. */
+const CACHE_NAME = 'arcade-launcher-v1';
 
 const CORE_ASSETS = [
   './',
@@ -21,28 +20,7 @@ const CORE_ASSETS = [
   './fonts/font-4.woff2',
   './fonts/font-5.woff2',
   './fonts/font-6.woff2',
-  './fonts/font-7.woff2',
-  './fonts/font-8.woff2',
-  './fonts/font-9.woff2',
-  './fonts/font-10.woff2',
-  './fonts/font-11.woff2',
-  './fonts/font-12.woff2',
-  './fonts/font-13.woff2',
-  './fonts/font-14.woff2',
-  './fonts/font-15.woff2',
-  './fonts/font-16.woff2',
-  './fonts/font-17.woff2',
-  './fonts/font-18.woff2',
-  './fonts/font-19.woff2',
-  './fonts/font-20.woff2',
-  './fonts/font-21.woff2',
-  './fonts/font-22.woff2',
-  './fonts/font-23.woff2',
-  './fonts/font-24.woff2',
-  './fonts/font-25.woff2',
-  './fonts/font-26.woff2',
-  './fonts/font-27.woff2',
-  './fonts/font-28.woff2'
+  './fonts/font-7.woff2'
 ];
 
 self.addEventListener('install', (event) => {
@@ -63,23 +41,27 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// STRICT cache-only. Never call fetch() for app assets.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
+  const url = new URL(event.request.url);
+
+  // Cross-origin (e.g. api.github.com) → let the network handle it
+  if (url.origin !== self.location.origin) {
+    return; // default browser fetch, no SW intervention
+  }
+
+  // Same-origin: cache-first, then network + cache for future offline use
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);
 
-    // Try exact match first
     let response = await cache.match(event.request);
     if (response) return response;
 
-    // Try without query string / hash
-    const url = new URL(event.request.url);
     response = await cache.match(url.pathname);
     if (response) return response;
 
-    // Common navigation fallbacks
+    // Navigation / root fallbacks
     if (event.request.mode === 'navigate' ||
         url.pathname === '/' ||
         url.pathname.endsWith('/index.html') ||
@@ -88,11 +70,19 @@ self.addEventListener('fetch', (event) => {
       if (response) return response;
     }
 
-    // Absolute last resort — still no network
-    return new Response('Offline', {
-      status: 503,
-      statusText: 'Service Unavailable',
-      headers: { 'Content-Type': 'text/plain' }
-    });
+    // Not in cache — try network, then store for offline
+    try {
+      const networkResponse = await fetch(event.request);
+      if (networkResponse && networkResponse.status === 200) {
+        cache.put(event.request, networkResponse.clone());
+      }
+      return networkResponse;
+    } catch (err) {
+      return new Response('Offline', {
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: { 'Content-Type': 'text/plain' }
+      });
+    }
   })());
 });

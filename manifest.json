@@ -1,14 +1,14 @@
 {
-  "name": "The Midnight Casino",
-  "short_name": "Midnight Casino",
-  "description": "A $1,000 stake, a $250,000,000,000 promise. True odds — the house takes nothing. Fictional stakes only.",
+  "name": "ARCADE — Game Launcher",
+  "short_name": "ARCADE",
+  "description": "Pixel game launcher. Drop HTML games in the repo and play fullscreen. Fully offline after first visit.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "orientation": "any",
-  "background_color": "#0d110c",
-  "theme_color": "#0d110c",
+  "background_color": "#06070d",
+  "theme_color": "#06070d",
   "categories": ["games", "entertainment"],
   "icons": [
     {

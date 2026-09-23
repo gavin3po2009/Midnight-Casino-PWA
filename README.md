@@ -1,18 +1,19 @@
-# The Midnight Casino — PWA
+# ARCADE — Game Launcher (PWA)
 
-A fully offline Progressive Web App version of *The Midnight Casino*.
+Fully offline Progressive Web App version of the pixel game launcher.
 
 ## Features
 
-- Installable on phone & desktop
-- **Fully offline** after first visit (all fonts, CSS, JS, and assets are cached)
-- Progress saved in the browser (`localStorage`)
-- No external network requests once installed
+- Installable on Chromebook, phone, and desktop
+- **Launcher shell is fully offline** after first visit (fonts, UI, icons cached)
+- Game HTML files are cached on first open → playable offline after that
+- GitHub repo scan works when online; cached library works offline
+- No external font CDNs
 
-## Deploy on Vercel + GitHub
+## Deploy (GitHub + Vercel)
 
-1. Create a new GitHub repository
-2. Upload **all files in this folder** to the **root** of the repo:
+1. Create a GitHub repo
+2. Put **all files from this folder at the repo root**:
    ```
    index.html
    manifest.json
@@ -21,26 +22,39 @@ A fully offline Progressive Web App version of *The Midnight Casino*.
    fonts/
    icons/
    ```
-3. Go to [vercel.com](https://vercel.com) → **Add New Project**
-4. Import the GitHub repo
-5. Leave settings default (no build command needed)
-6. Click **Deploy**
+3. Drop any `.html` games next to the launcher (or one folder deep)
+4. Import the repo in [vercel.com](https://vercel.com) → Deploy
+5. Optional: point your custom domain (e.g. omnilauncher.link)
 
-You’ll get a free HTTPS URL. Open it and install the app.
-
-## Local testing
+## Local test
 
 ```bash
 npx serve .
 ```
 
-Then open `http://localhost:3000` in Chrome and check:
-- DevTools → Application → Manifest
-- DevTools → Application → Service Workers
-- Toggle “Offline” and reload — everything still works
+Open Chrome → Application → Manifest / Service Workers.  
+Toggle Offline and confirm the launcher still loads.
 
-## Notes
+## Offline behavior
 
-- The service worker caches every asset on install.
-- After the first load, you can turn off Wi-Fi and the casino still runs.
-- Fictional stakes only — no real money.
+| Component              | Offline? |
+|------------------------|----------|
+| Launcher UI + fonts    | Yes (after first visit) |
+| Previously opened games| Yes (cached on first open) |
+| GitHub “rescan”        | No (needs network) |
+| Brand-new game files never opened | No until opened once online |
+
+## Config
+
+Edit `CONFIG` near the top of `index.html`:
+
+- `title` — launcher name
+- `repo` — `'owner/repo'` (needed on custom domains)
+- `games` — manual list if you don’t want auto-scan
+- `exclude` — filenames to hide
+
+## Chromebook install
+
+1. Open the site in Chrome
+2. Menu → **Install ARCADE…** / install icon in the address bar
+3. Launch from the Chrome OS launcher (not a regular tab)
