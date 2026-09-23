@@ -232,8 +232,11 @@ footer b{color:var(--dim)}
    ===================================================================== */
 const CONFIG={
   title:'ARCADE',                 // launcher name shown in the header
-  repo:null,                      // 'owner/repo' — auto-detected on *.github.io; set manually for custom domains
-  exclude:['index.html','404.html'], // filenames never shown as games
+  // Custom domain: omnilauncher.link
+  // Set this to your GitHub "owner/repo" so the launcher can scan for .html games.
+  // Example: repo:'yourname/arcade-games',
+  repo:'gavin3po2009/Midnight-Casino-PWA',
+  exclude:['index.html','404.html','sw.js'], // filenames never shown as games
   games:[],                       // e.g. {file:'SnakeYahu.html', title:'SnakeYahu', desc:'penny eater'}
   scanSubfolders:true,            // also look one folder deep (a /games folder etc.)
   cacheMinutes:10                 // how long the scanned list is reused before re-hitting the API

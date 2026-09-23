@@ -1,60 +1,57 @@
 # ARCADE — Game Launcher (PWA)
 
-Fully offline Progressive Web App version of the pixel game launcher.
+Fully offline Progressive Web App for **omnilauncher.link**.
 
 ## Features
 
 - Installable on Chromebook, phone, and desktop
-- **Launcher shell is fully offline** after first visit (fonts, UI, icons cached)
-- Game HTML files are cached on first open → playable offline after that
-- GitHub repo scan works when online; cached library works offline
-- No external font CDNs
+- Launcher shell fully offline after first visit
+- Drop `.html` games next to the launcher → they appear after rescan
+- Games cached on first open → playable offline after that
 
-## Deploy (GitHub + Vercel)
+## Custom domain setup (omnilauncher.link)
 
-1. Create a GitHub repo
-2. Put **all files from this folder at the repo root**:
+1. Push this folder to the **root** of your GitHub repo
+2. In `index.html`, find `CONFIG` and set:
+   ```js
+   repo: 'YOUR_GITHUB_USERNAME/YOUR_REPO_NAME',
    ```
-   index.html
-   manifest.json
-   sw.js
-   README.md
-   fonts/
-   icons/
-   ```
-3. Drop any `.html` games next to the launcher (or one folder deep)
-4. Import the repo in [vercel.com](https://vercel.com) → Deploy
-5. Optional: point your custom domain (e.g. omnilauncher.link)
+   Example: `repo: 'alice/omnilauncher',`
+3. Connect the repo to Vercel and point **omnilauncher.link** at it
+4. Open the site → press **⟳** to scan for games
 
-## Local test
+Without `CONFIG.repo` set, auto-scan won’t work on a custom domain (GitHub can’t be guessed from the domain alone).
 
-```bash
-npx serve .
+## Adding games
+
+1. Commit any `.html` files next to `index.html` (or one folder deep)
+2. Push
+3. Open the launcher → **⟳ RESCAN**
+4. New cards appear; open once online to cache for offline play
+
+## Deploy checklist
+
 ```
-
-Open Chrome → Application → Manifest / Service Workers.  
-Toggle Offline and confirm the launcher still loads.
+index.html
+manifest.json
+sw.js
+README.md
+fonts/
+icons/
+YourGame.html   ← drop games here
+```
 
 ## Offline behavior
 
-| Component              | Offline? |
-|------------------------|----------|
-| Launcher UI + fonts    | Yes (after first visit) |
-| Previously opened games| Yes (cached on first open) |
-| GitHub “rescan”        | No (needs network) |
-| Brand-new game files never opened | No until opened once online |
-
-## Config
-
-Edit `CONFIG` near the top of `index.html`:
-
-- `title` — launcher name
-- `repo` — `'owner/repo'` (needed on custom domains)
-- `games` — manual list if you don’t want auto-scan
-- `exclude` — filenames to hide
+| Part | Offline? |
+|------|----------|
+| Launcher UI + fonts | Yes (after first visit) |
+| Games opened once | Yes |
+| GitHub rescan | Needs network |
+| Brand-new unopened games | Need one online open first |
 
 ## Chromebook install
 
-1. Open the site in Chrome
-2. Menu → **Install ARCADE…** / install icon in the address bar
-3. Launch from the Chrome OS launcher (not a regular tab)
+1. Open https://omnilauncher.link
+2. Chrome menu → **Install ARCADE…**
+3. Launch from the Chrome OS app launcher (not a browser tab)
