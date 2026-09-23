@@ -200,7 +200,7 @@ footer b{color:var(--dim)}
 
   <footer>
     <div id="srcInfo">LIBRARY · —</div>
-    <div class="keys">CLICK A GAME TO PLAY FULLSCREEN · <b>ESC</b> RETURNS HERE · DROP <b>.HTML</b> FILES IN THE REPO TO ADD MORE</div>
+    <div class="keys">CLICK A GAME TO PLAY FULLSCREEN · <b>ESC</b> RETURNS HERE · <b>BUILD 3</b></div>
   </footer>
 </div>
 
@@ -226,20 +226,26 @@ footer b{color:var(--dim)}
 /* =====================================================================
    CONFIG — tweak me
    ---------------------------------------------------------------------
-   Games are auto-discovered and merged in priority order:
+   Games are discovered from several sources, merged in priority order:
      1. CONFIG.games below          (always wins — good for local files)
      2. games.json next to launcher ([{"file":"Foo.html","title":"Foo"}])
-     3. GitHub repo scan            (every .html file sitting next to this
-                                     launcher — or one folder deep — shows
-                                     up automatically. Just commit + rescan.)
-   `repo` is pinned below because the site runs on a custom domain
-   (omnilauncher.link), which hides the owner/repo from the URL.
+     3. GitHub repo scan            (API listing of .html files)
+     4. Direct file probing         (HEAD-checks the filenames below on
+                                    the LIVE site — works even when the
+                                    API is unavailable, rate-limited, or
+                                    the repo is private. Add your game
+                                    filenames here any time.)
    ===================================================================== */
 const CONFIG={
   title:'OMNILAUNCHER',
   repo:'gavin3po2009/Midnight-Casino-PWA',
   exclude:['index.html','404.html'],
-  games:[],                       // e.g. {file:'SnakeYahu.html', title:'SnakeYahu', desc:'penny eater'}
+  games:[],
+  probeFiles:[
+    'SnakeYahu.html','MightySeagull.html','RunFromVerity.html','Gambling.html',
+    'snakeyahu.html','mightyseagull.html','runfromverity.html','gambling.html'
+  ],
+  probeFolders:['','games/'],
   scanSubfolders:true,
   cacheMinutes:10
 };
@@ -260,7 +266,7 @@ const LAUNCHER_FILE=(()=>{const p=location.pathname.split('/').filter(Boolean);c
 /* ---------- state ---------- */
 let GAMES=[], REPO_LABEL='', sortMode='az';
 try{sortMode=localStorage.getItem('arcade.sort')||'az'}catch(e){sortMode='az'}
-const STATS_KEY='arcade.stats.v1', CACHE_KEY='arcade.library.v3';
+const STATS_KEY='arcade.stats.v1', CACHE_KEY='arcade.library.v4';
 let stats={};
 try{stats=JSON.parse(localStorage.getItem(STATS_KEY))||{}}catch(e){}
 function saveStats(){try{localStorage.setItem(STATS_KEY,JSON.stringify(stats))}catch(e){}}
@@ -395,19 +401,54 @@ async function loadGamesJson(){
   return[];
 }
 
+/* ---------- DIRECT FILE PROBE — the guaranteed fallback ----------
+   HEAD-checks known filenames on the LIVE site. Independent of the
+   GitHub API, so it works for private repos, rate limits, blocked
+   requests, or any static host. A hit IS the validation. */
+async function probeLive(){
+  if(!IS_HTTP)return[];
+  const found=[],seen=new Set();
+  const jobs=[];
+  for(const folder of CONFIG.probeFolders){
+    for(const name of CONFIG.probeFiles){
+      const url=resolveUrl(folder+name);
+      if(seen.has(url))continue;
+      seen.add(url);
+      jobs.push((async()=>{
+        try{
+          const r=await fetch(url,{method:'HEAD'});
+          if(r.ok&&!found.some(g=>g.url===url)){
+            found.push({url:url,file:name,title:prettify(name),source:'probe'});
+          }
+        }catch(e){}
+      })());
+    }
+  }
+  await Promise.all(jobs);
+  /* dedupe case-variants pointing at the same file (keep first) */
+  const out=[],lower=new Set();
+  for(const g of found){
+    const k=g.url.toLowerCase();
+    if(!lower.has(k)){lower.add(k);out.push(g)}
+  }
+  return out;
+}
+
 /* ---------- merge all sources, fetch real titles ---------- */
 async function gather(){
   const manual=CONFIG.games.map(normalizeEntry).filter(Boolean);
   const json=await loadGamesJson();
-  let apiGames=[],apiErr=null;
   const info=detectRepo();
+  let apiGames=[],apiErr=null;
   if(info){try{apiGames=await listRepoGames(info)}catch(e){apiErr=e}}
   else apiErr={noRepo:true};
+  const probeGames=await probeLive();
   const map=new Map();
   for(const g of apiGames)map.set(g.url,Object.assign({},g));
+  for(const g of probeGames)if(!map.has(g.url))map.set(g.url,Object.assign({},g));
   for(const g of json)map.set(g.url,Object.assign({},map.get(g.url)||{},g));
   for(const g of manual)map.set(g.url,Object.assign({},map.get(g.url)||{},g));
-  return{list:Array.from(map.values()),apiErr:apiErr,info:info};
+  return{list:Array.from(map.values()),apiErr:apiErr,info:info,probed:probeGames.length};
 }
 async function decorate(games){
   if(!IS_HTTP)return;
@@ -455,20 +496,40 @@ async function discover(force){
   try{
     const res=await gather();
     if(res.info)REPO_LABEL=res.info.owner+'/'+res.info.repo;
-    if(res.apiErr){
-      if(res.apiErr.rateLimited){note='GITHUB API RATE LIMIT — SHOWING SAVED LIST';noteKind='warn'}
-      else if(res.apiErr.noRepo){note='CUSTOM DOMAIN — SET CONFIG.repo OR USE games.json';noteKind='warn'}
-      else if(res.apiErr.notFound){note='REPO NOT FOUND — CHECK CONFIG.repo';noteKind='warn'}
-      else{note='REPO SCAN FAILED';noteKind='warn'}
-    }
+    try{console.info('[OMNILAUNCHER b3] repo:',res.info?REPO_LABEL:'none',
+      '| api:',res.apiErr?(res.apiErr.rateLimited?'rate-limited':res.apiErr.notFound?'not-listable':res.apiErr.noRepo?'no-repo':'error'):'ok',
+      '| probe hits:',res.probed,'| games:',res.list.length)}catch(e){}
     if(res.list.length>0){
       await decorate(res.list);
       GAMES=res.list;
       saveCacheList(res.list.map(packGame));
-    }else if(!res.apiErr){
-      GAMES=[];
+      if(res.apiErr&&res.probed>0){
+        note='GITHUB API UNAVAILABLE — GAMES FOUND BY DIRECT FILE PROBE';
+      }
+    }else{
+      if(cached&&cached.list.length>0){
+        note='SCAN FOUND NOTHING — KEEPING SAVED LIST';
+        noteKind='warn';
+      }else{
+        GAMES=[];
+        const bits=[];
+        if(res.apiErr){
+          if(res.apiErr.rateLimited)bits.push('API rate-limited');
+          else if(res.apiErr.notFound)bits.push('API can\'t list repo (private or renamed)');
+          else if(res.apiErr.noRepo)bits.push('no repo configured');
+          else bits.push('API error');
+        }else{
+          bits.push('repo scanned, 0 .html files');
+        }
+        bits.push('0 games found live on '+location.hostname);
+        note=bits.join(' · ');
+        noteKind='warn';
+      }
     }
-  }catch(e){note='SCAN FAILED — NETWORK?';noteKind='warn'}
+  }catch(e){
+    note='SCAN FAILED — NETWORK?';noteKind='warn';
+    try{console.warn('[OMNILAUNCHER b3]',e)}catch(_){}
+  }
   refreshBtn.classList.remove('spin');
   renderAll();
   setMsg(note,noteKind);
@@ -721,17 +782,18 @@ function buildEmpty(q){
   emptyEl.appendChild(h);
   const ol=document.createElement('ol');
   const items=[
-    'Drop <code>.html</code> files into the repo, next to this launcher (subfolders are scanned too).',
-    'Commit and push — GitHub Pages updates in seconds.',
-    'Press <b>⟳ RESCAN</b> and every game appears here, ready to launch fullscreen.'
+    'Commit your game <code>.html</code> files next to <code>index.html</code> in the repo (a <code>games/</code> subfolder works too).',
+    'Quick check — open <code>https://'+location.hostname+'/Gambling.html</code> directly: if that page loads, the launcher will find it; if it 404s, the file isn\'t deployed yet.',
+    'Wait ~30s for GitHub Pages, then press <b>⟳ RESCAN</b> (and hard-refresh with <b>Ctrl+Shift+R</b> if the page looks stale).'
   ];
   items.forEach(t=>{const li=document.createElement('li');li.innerHTML=t;ol.appendChild(li)});
   emptyEl.appendChild(ol);
   const p=document.createElement('p');p.className='fine';
   let extra='';
-  if(!IS_HTTP)extra=' You opened this page directly from disk (file://), so repo auto-scan is off — host it on GitHub Pages or a local server, or list games in <code>CONFIG.games</code>.';
-  else if(!detectRepo())extra=' Custom domain detected — set <code>CONFIG.repo</code> to <code>"owner/repo"</code>, or add a <code>games.json</code>.';
-  p.innerHTML='Optional: a <code>games.json</code> next to this launcher can set titles/descriptions.'+extra;
+  if(!IS_HTTP)extra=' Opened from disk (file://) — no network scanning here; list games in <code>CONFIG.games</code>.';
+  else if(!detectRepo())extra=' No repo detected — set <code>CONFIG.repo</code>.';
+  else extra=' Scanned: '+(CONFIG.repo||'auto')+' · direct probes on '+location.hostname+' found 0 games. If the API can\'t list a private repo, add filenames to <code>CONFIG.probeFiles</code>.';
+  p.innerHTML='Manual options: <code>games.json</code> or <code>CONFIG.games</code>.'+extra;
   emptyEl.appendChild(p);
 }
 function renderGrid(){
@@ -985,6 +1047,7 @@ if(document.fonts&&document.fonts.load){
  $('brandTitle').textContent=CONFIG.title;
 document.title=CONFIG.title+' — Game Launcher';
 if(!fsSupported())pFs.style.display='none';
+try{console.info('[OMNILAUNCHER] build 3 running on '+location.href)}catch(e){}
 discover(false);
 })();
 </script>
