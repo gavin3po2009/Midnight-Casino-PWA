@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Run From Verity</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0d0b14;
+    --panel: #17131f;
+    --panel-line: #2c2340;
+    --wall: #2c2340;
+    --wall-edge: #453771;
+    --text: #f2eefc;
+    --muted: #a79bc4;
+    --player: #5ec8f2;
+    --calm: #4fd1a5;
+    --upset: #f5c04a;
+    --mad: #ef4565;
+    --pellet: #ece6fb;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; height:100%;
+    background: radial-gradient(ellipse at 50% -10%, #241a38 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+  #app{
+    min-height:100%;
+    display:flex; flex-direction:column; align-items:center;
+    padding: 20px 14px 32px;
+    gap: 14px;
+  }
+  h1{
+    font-family:'Press Start 2P', monospace;
+    font-size: clamp(16px, 4vw, 26px);
+    letter-spacing: 1px;
+    margin: 6px 0 0;
+    text-align:center;
+    color:var(--text);
+    text-shadow: 0 0 18px rgba(94,200,242,0.35), 0 0 2px rgba(239,69,101,0.4);
+  }
+  .tagline{
+    color:var(--muted);
+    font-size:13px;
+    text-align:center;
+    max-width: 520px;
+    margin: -6px 0 4px;
+  }
+  .cabinet{
+    position:relative;
+    background: var(--panel);
+    border-radius: 10px;
+    padding: 14px;
+    box-shadow:
+      0 0 0 1px var(--panel-line),
+      inset 0 0 0 6px #0d0b14,
+      inset 0 0 40px rgba(94,200,242,0.06),
+      0 20px 50px -20px rgba(0,0,0,0.7);
+    display:flex; flex-direction:column; gap:10px;
+    width: 100%;
+    max-width: 720px;
+  }
+  .hud{
+    display:flex; align-items:center; justify-content:space-between;
+    font-size: 13px;
+    color: var(--muted);
+    padding: 0 2px;
+  }
+  .hud .stat{ display:flex; flex-direction:column; gap:2px; min-width:64px; }
+  .hud .stat span.label{ font-size:10px; letter-spacing:0.08em; }
+  .hud .stat span.value{ color:var(--text); font-size:16px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .lives{ display:flex; gap:4px; font-size:16px; }
+  .lives .lost{ opacity:0.25; }
+  .canvas-wrap{
+    position:relative;
+    background:#0a0812;
+    border-radius:6px;
+    overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow: inset 0 0 0 2px #241a38;
+  }
+  canvas{ display:block; width:100%; height:auto; max-height:62vh; }
+  .anger-bar{
+    display:flex; align-items:center; gap:10px;
+    font-size:12px;
+    color:var(--muted);
+  }
+  .anger-track{
+    flex:1;
+    height:14px;
+    border-radius:7px;
+    background:#0a0812;
+    box-shadow: inset 0 0 0 1px var(--panel-line);
+    overflow:hidden;
+    position:relative;
+  }
+  .anger-fill{
+    height:100%;
+    width:0%;
+    border-radius:7px;
+    transition: width 0.35s ease, background 0.35s ease;
+    background: var(--calm);
+  }
+  .anger-label{
+    min-width: 78px;
+    text-align:right;
+    font-weight:600;
+    transition: color 0.3s ease;
+  }
+  .overlay{
+    position:absolute; inset:0;
+    background: rgba(10,8,18,0.92);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; padding: 24px; text-align:center;
+    opacity:0; pointer-events:none; transition: opacity 0.25s ease;
+  }
+  .overlay.show{ opacity:1; pointer-events:auto; }
+  .overlay h2{
+    font-family:'Press Start 2P', monospace;
+    font-size: clamp(14px,3.6vw,20px);
+    margin:0;
+    line-height:1.6;
+  }
+  .overlay p{ color:var(--muted); font-size:14px; max-width:380px; margin:0; line-height:1.5; }
+  .overlay .big-score{ font-size:28px; font-weight:700; color:var(--player); }
+  button.arcade{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:700;
+    font-size:14px;
+    padding: 12px 26px;
+    border-radius: 8px;
+    border: none;
+    background: var(--player);
+    color: #0a0812;
+    cursor:pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+    box-shadow: 0 4px 0 0 #2c8ab0;
+  }
+  button.arcade:active{ transform: translateY(3px); box-shadow: 0 1px 0 0 #2c8ab0; }
+  button.arcade.secondary{
+    background: transparent;
+    color: var(--text);
+    box-shadow: inset 0 0 0 2px var(--panel-line);
+  }
+  .how-it-works{
+    display:flex; flex-direction:column; gap:6px;
+    text-align:left;
+    background:#0a0812;
+    border-radius:8px;
+    padding:12px 16px;
+    box-shadow: inset 0 0 0 1px var(--panel-line);
+    max-width:420px;
+  }
+  .how-it-works .row{ display:flex; align-items:center; gap:10px; font-size:13px; color:var(--muted); }
+  .dot{ width:12px; height:12px; border-radius:50%; flex:none; }
+  .controls-hint{ color:var(--muted); font-size:12px; text-align:center; }
+  .dpad{
+    display:none;
+    grid-template-columns: repeat(3, 52px);
+    grid-template-rows: repeat(3, 52px);
+    gap:6px;
+    justify-content:center;
+    margin-top:4px;
+  }
+  .dpad button{
+    background:#1d1830;
+    box-shadow: inset 0 0 0 1px var(--panel-line);
+    border:none;
+    border-radius:10px;
+    color:var(--text);
+    font-size:18px;
+    display:flex; align-items:center; justify-content:center;
+    -webkit-user-select:none; user-select:none;
+  }
+  .dpad button:active{ background:#2c2340; }
+  #dpad-up{ grid-column:2; grid-row:1; }
+  #dpad-left{ grid-column:1; grid-row:2; }
+  #dpad-right{ grid-column:3; grid-row:2; }
+  #dpad-down{ grid-column:2; grid-row:3; }
+  @media (pointer: coarse){
+    .dpad{ display:grid; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>RUN FROM VERITY</h1>
+  <p class="tagline">Clear every pellet without catching Verity's eye. The tidier the maze gets, the less she can stand it.</p>
+
+  <div class="cabinet">
+    <div class="hud">
+      <div class="stat"><span class="label">LEVEL</span><span class="value" id="hud-level">1 / 5</span></div>
+      <div class="stat"><span class="label">SCORE</span><span class="value" id="hud-score">0</span></div>
+      <div class="stat"><span class="label">LIVES</span><span class="value lives" id="hud-lives">♥ ♥ ♥</span></div>
+    </div>
+
+    <div class="canvas-wrap">
+      <canvas id="game"></canvas>
+
+      <div class="overlay show" id="overlay-start">
+        <h2>RUN FROM<br>VERITY</h2>
+        <div class="how-it-works">
+          <div class="row"><span class="dot" style="background:#f7d51d"></span> Not Angry — Verity mostly wanders</div>
+          <div class="row"><span class="dot" style="background:#d9ab13"></span> Upset — she starts hunting you down</div>
+          <div class="row"><span class="dot" style="background:#cca80f"></span> MAD — she knows exactly where you are</div>
+        </div>
+        <p>Every pellet you eat pushes him closer to MAD. Five levels, each with a tighter maze and a faster Verity.</p>
+        <button class="arcade" id="btn-start">Start Game</button>
+        <p class="controls-hint">Arrow keys or WASD to move · on-screen pad on touch devices</p>
+      </div>
+
+      <div class="overlay" id="overlay-caught">
+        <h2>CAUGHT!</h2>
+        <p id="caught-text">Verity got you. Lives remaining: 2</p>
+      </div>
+
+      <div class="overlay" id="overlay-levelup">
+        <h2 id="levelup-title">LEVEL 1 CLEAR</h2>
+        <p id="levelup-text">Verity is already dreading the next room.</p>
+        <button class="arcade" id="btn-next">Continue</button>
+      </div>
+
+      <div class="overlay" id="overlay-gameover">
+        <h2>GAME OVER</h2>
+        <p>Verity finally caught up with you.</p>
+        <div class="big-score" id="final-score-lose">0</div>
+        <button class="arcade" id="btn-retry">Try Again</button>
+      </div>
+
+      <div class="overlay" id="overlay-win">
+        <h2>YOU ESCAPED<br>VERITY</h2>
+        <p>All five rooms, spotless. Even she has to respect that.</p>
+        <div class="big-score" id="final-score-win">0</div>
+        <button class="arcade" id="btn-playagain">Play Again</button>
+      </div>
+    </div>
+
+    <div class="anger-bar">
+      <span>VERITY</span>
+      <div class="anger-track"><div class="anger-fill" id="anger-fill"></div></div>
+      <span class="anger-label" id="anger-label">Not Angry</span>
+    </div>
+
+    <div class="dpad" id="dpad">
+      <button id="dpad-up">▲</button>
+      <button id="dpad-left">◀</button>
+      <button id="dpad-right">▶</button>
+      <button id="dpad-down">▼</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- Level configuration ----------
+  const LEVELS = [
+    { w:15, h:11, loopFactor:0.36, verityCount:1, verityInterval:300 },
+    { w:17, h:13, loopFactor:0.28, verityCount:1, verityInterval:270 },
+    { w:19, h:15, loopFactor:0.22, verityCount:1, verityInterval:240 },
+    { w:21, h:15, loopFactor:0.17, verityCount:2, verityInterval:230 },
+    { w:23, h:17, loopFactor:0.12, verityCount:2, verityInterval:205 },
+  ];
+  const PLAYER_INTERVAL = 150; // ms per tile, constant across levels
+  const ANGER_MULT = { calm: 1.55, upset: 1.15, mad: 0.72 };
+  const START_LIVES = 3;
+  const COLORS = {
+    bg: '#0a0812', wall: '#2c2340', pellet: '#ece6fb',
+    player: '#5ec8f2', calm: '#4fd1a5', upset: '#f5c04a', mad: '#ef4565',
+  };
+
+  // ---------- DOM ----------
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const hudLevel = document.getElementById('hud-level');
+  const hudScore = document.getElementById('hud-score');
+  const hudLives = document.getElementById('hud-lives');
+  const angerFill = document.getElementById('anger-fill');
+  const angerLabel = document.getElementById('anger-label');
+
+  const overlays = {
+    start: document.getElementById('overlay-start'),
+    caught: document.getElementById('overlay-caught'),
+    levelup: document.getElementById('overlay-levelup'),
+    gameover: document.getElementById('overlay-gameover'),
+    win: document.getElementById('overlay-win'),
+  };
+  function showOverlay(name){
+    Object.values(overlays).forEach(o=>o.classList.remove('show'));
+    if(name) overlays[name].classList.add('show');
+  }
+
+  document.getElementById('btn-start').addEventListener('click', ()=>{ showOverlay(null); startGame(); });
+  document.getElementById('btn-retry').addEventListener('click', ()=>{ showOverlay(null); startGame(); });
+  document.getElementById('btn-playagain').addEventListener('click', ()=>{ showOverlay(null); startGame(); });
+  document.getElementById('btn-next').addEventListener('click', ()=>{ showOverlay(null); loadLevel(state.levelIndex+1); });
+
+  // ---------- Maze generation ----------
+  function generateMaze(w, h, loopFactor){
+    const grid = Array.from({length:h}, ()=> new Array(w).fill(0));
+    const visited = Array.from({length:h}, ()=> new Array(w).fill(false));
+    grid[1][1] = 2; visited[1][1] = true;
+    const stack = [[1,1]];
+    const dirs = [[2,0],[-2,0],[0,2],[0,-2]];
+    while(stack.length){
+      const [cx,cy] = stack[stack.length-1];
+      const options = [];
+      for(const [dx,dy] of dirs){
+        const nx = cx+dx, ny = cy+dy;
+        if(nx>0 && nx<w-1 && ny>0 && ny<h-1 && !visited[ny][nx]) options.push([nx,ny,dx,dy]);
+      }
+      if(options.length===0){ stack.pop(); continue; }
+      const [nx,ny,dx,dy] = options[(Math.random()*options.length)|0];
+      grid[cy+dy/2][cx+dx/2] = 2;
+      grid[ny][nx] = 2;
+      visited[ny][nx] = true;
+      stack.push([nx,ny]);
+    }
+    // carve extra loops for variety / escape routes
+    for(let y=1;y<h-1;y++){
+      for(let x=1;x<w-1;x++){
+        if(grid[y][x]===0){
+          if(x%2===0 && y%2===1){
+            if(grid[y][x-1]===2 && grid[y][x+1]===2 && Math.random()<loopFactor) grid[y][x]=2;
+          } else if(y%2===0 && x%2===1){
+            if(grid[y-1][x]===2 && grid[y+1][x]===2 && Math.random()<loopFactor) grid[y][x]=2;
+          }
+        }
+      }
+    }
+    // 2 -> pellet(1); walls remain 0
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++) if(grid[y][x]===2) grid[y][x]=1;
+    return grid;
+  }
+
+  function bfsDistances(grid, w, h, start){
+    const dist = Array.from({length:h}, ()=> new Array(w).fill(-1));
+    const q = [start];
+    dist[start[1]][start[0]] = 0;
+    let head = 0;
+    while(head < q.length){
+      const [x,y] = q[head++];
+      const d = dist[y][x];
+      const nbrs = [[x+1,y],[x-1,y],[x,y+1],[x,y-1]];
+      for(const [nx,ny] of nbrs){
+        if(nx>=0 && nx<w && ny>=0 && ny<h && grid[ny][nx]!==0 && dist[ny][nx]===-1){
+          dist[ny][nx] = d+1;
+          q.push([nx,ny]);
+        }
+      }
+    }
+    return dist;
+  }
+
+  function bfsNextStep(grid, w, h, from, to){
+    if(from[0]===to[0] && from[1]===to[1]) return null;
+    const dist = Array.from({length:h}, ()=> new Array(w).fill(-1));
+    const q = [to];
+    dist[to[1]][to[0]] = 0;
+    let head = 0;
+    while(head < q.length){
+      const [x,y] = q[head++];
+      const d = dist[y][x];
+      const nbrs = [[x+1,y],[x-1,y],[x,y+1],[x,y-1]];
+      for(const [nx,ny] of nbrs){
+        if(nx>=0 && nx<w && ny>=0 && ny<h && grid[ny][nx]!==0 && dist[ny][nx]===-1){
+          dist[ny][nx] = d+1;
+          q.push([nx,ny]);
+        }
+      }
+    }
+    // step from `from` toward decreasing distance to target
+    const [fx,fy] = from;
+    const options = [[fx+1,fy,1,0],[fx-1,fy,-1,0],[fx,fy+1,0,1],[fx,fy-1,0,-1]];
+    let best = null, bestDist = dist[fy][fx];
+    for(const [nx,ny,dx,dy] of options){
+      if(nx>=0 && nx<w && ny>=0 && ny<h && grid[ny][nx]!==0 && dist[ny][nx]!==-1){
+        if(bestDist===-1 || dist[ny][nx] < bestDist){ bestDist = dist[ny][nx]; best = {x:dx,y:dy}; }
+      }
+    }
+    return best;
+  }
+
+  function canMove(grid,w,h,x,y){ return x>=0 && x<w && y>=0 && y<h && grid[y][x]!==0; }
+
+  // ---------- Game state ----------
+  const state = {
+    levelIndex: 0,
+    score: 0,
+    lives: START_LIVES,
+    grid: null, w:0, h:0, tileSize: 24,
+    totalPellets: 0, pelletsEaten: 0,
+    anger: 'calm',
+    player: null,
+    verities: [],
+    running: false,
+    frozen: false,
+    keysDesired: {x:0,y:0},
+  };
+
+  function makeMover(tx,ty,tileSize){
+    return {
+      tileX:tx, tileY:ty,
+      fromTile:[tx,ty], toTile:[tx,ty],
+      pixelX: tx*tileSize, pixelY: ty*tileSize,
+      fromPx:[tx*tileSize, ty*tileSize], toPx:[tx*tileSize, ty*tileSize],
+      moving:false, moveStart:0, duration:150,
+      dir:{x:0,y:0},
+    };
+  }
+
+  function loadLevel(levelIndex){
+    if(levelIndex >= LEVELS.length){ finishGame(true); return; }
+    state.levelIndex = levelIndex;
+    const cfg = LEVELS[levelIndex];
+    let w = cfg.w, h = cfg.h;
+    if(w%2===0) w++; if(h%2===0) h++;
+    const grid = generateMaze(w,h,cfg.loopFactor);
+
+    const distFromPlayer = bfsDistances(grid,w,h,[1,1]);
+    let cells = [];
+    for(let y=1;y<h-1;y++) for(let x=1;x<w-1;x++) if(grid[y][x]!==0) cells.push([x,y,distFromPlayer[y][x]]);
+    cells.sort((a,b)=> b[2]-a[2]);
+
+    const verityStarts = [cells[0].slice(0,2)];
+    if(cfg.verityCount > 1){
+      const distFromV1 = bfsDistances(grid,w,h,verityStarts[0]);
+      let candidates = cells.filter(c => c[2] > (cells[0][2]*0.4));
+      candidates.sort((a,b)=> distFromV1[b[1]][b[0]] - distFromV1[a[1]][a[0]]);
+      verityStarts.push(candidates[0] ? candidates[0].slice(0,2) : cells[Math.min(1,cells.length-1)].slice(0,2));
+    }
+
+    grid[1][1] = 2; // player start cleared, no pellet
+    let totalPellets = 0;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++) if(grid[y][x]===1) totalPellets++;
+
+    const maxTile = Math.floor(Math.min(680/w, 480/h));
+    const tileSize = Math.max(16, Math.min(34, maxTile));
+
+    canvas.width = w*tileSize;
+    canvas.height = h*tileSize;
+
+    state.grid = grid; state.w = w; state.h = h; state.tileSize = tileSize;
+    state.totalPellets = totalPellets; state.pelletsEaten = 0;
+    state.anger = 'calm';
+    state.player = makeMover(1,1,tileSize);
+    state.player.duration = PLAYER_INTERVAL;
+    state.verities = verityStarts.map(([x,y])=>{
+      const m = makeMover(x,y,tileSize);
+      m.startTile = [x,y];
+      m.baseInterval = cfg.verityInterval;
+      m.duration = cfg.verityInterval * ANGER_MULT.calm;
+      m.wanderDir = null;
+      return m;
+    });
+    state.frozen = false;
+    state.running = true;
+
+    hudLevel.textContent = (levelIndex+1) + ' / ' + LEVELS.length;
+    updateAngerUI();
+    updateHUD();
+  }
+
+  function updateHUD(){
+    hudScore.textContent = state.score;
+    let hearts = '';
+    for(let i=0;i<START_LIVES;i++) hearts += (i < state.lives) ? '♥ ' : '<span class="lost">♥</span> ';
+    hudLives.innerHTML = hearts.trim();
+  }
+
+  function updateAngerUI(){
+    const ratio = state.totalPellets ? state.pelletsEaten/state.totalPellets : 0;
+    let pct, color, label;
+    if(ratio < 0.34){ pct = (ratio/0.34)*33; color = COLORS.calm; label = 'Not Angry'; state.anger='calm'; }
+    else if(ratio < 0.67){ pct = 33 + ((ratio-0.34)/0.33)*33; color = COLORS.upset; label = 'Upset'; state.anger='upset'; }
+    else { pct = 66 + ((ratio-0.67)/0.33)*34; color = COLORS.mad; label = 'MAD'; state.anger='mad'; }
+    angerFill.style.width = Math.min(100,pct) + '%';
+    angerFill.style.background = color;
+    angerLabel.textContent = label;
+    angerLabel.style.color = color;
+    for(const v of state.verities) v.duration = v.baseInterval * ANGER_MULT[state.anger];
+  }
+
+  // ---------- Input ----------
+  const KEY_DIRS = {
+    ArrowUp:{x:0,y:-1}, ArrowDown:{x:0,y:1}, ArrowLeft:{x:-1,y:0}, ArrowRight:{x:1,y:0},
+    w:{x:0,y:-1}, s:{x:0,y:1}, a:{x:-1,y:0}, d:{x:1,y:0},
+    W:{x:0,y:-1}, S:{x:0,y:1}, A:{x:-1,y:0}, D:{x:1,y:0},
+  };
+  window.addEventListener('keydown', (e)=>{
+    const d = KEY_DIRS[e.key];
+    if(d){ state.keysDesired = d; e.preventDefault(); }
+  }, {passive:false});
+
+  function bindDpad(id, dir){
+    const el = document.getElementById(id);
+    const set = (ev)=>{ state.keysDesired = dir; ev.preventDefault(); };
+    el.addEventListener('touchstart', set, {passive:false});
+    el.addEventListener('mousedown', set);
+  }
+  bindDpad('dpad-up', {x:0,y:-1});
+  bindDpad('dpad-down', {x:0,y:1});
+  bindDpad('dpad-left', {x:-1,y:0});
+  bindDpad('dpad-right', {x:1,y:0});
+
+  // ---------- Movement resolution ----------
+  function startMove(mover, dx, dy, now){
+    const ts = state.tileSize;
+    mover.fromTile = [mover.tileX, mover.tileY];
+    mover.toTile = [mover.tileX+dx, mover.tileY+dy];
+    mover.fromPx = [mover.pixelX, mover.pixelY];
+    mover.toPx = [mover.toTile[0]*ts, mover.toTile[1]*ts];
+    mover.moving = true;
+    mover.moveStart = now;
+    mover.dir = {x:dx,y:dy};
+  }
+
+  function updatePlayer(now){
+    const p = state.player, g = state.grid, w = state.w, h = state.h;
+    if(!p.moving){
+      const kd = state.keysDesired;
+      if(kd.x || kd.y){
+        if(canMove(g,w,h,p.tileX+kd.x,p.tileY+kd.y)){ startMove(p,kd.x,kd.y,now); }
+        else if((p.dir.x||p.dir.y) && canMove(g,w,h,p.tileX+p.dir.x,p.tileY+p.dir.y)){ startMove(p,p.dir.x,p.dir.y,now); }
+      } else if(p.dir.x||p.dir.y){
+        if(canMove(g,w,h,p.tileX+p.dir.x,p.tileY+p.dir.y)) startMove(p,p.dir.x,p.dir.y,now);
+      }
+    }
+    if(p.moving){
+      const t = Math.min(1, (now-p.moveStart)/p.duration);
+      p.pixelX = p.fromPx[0] + (p.toPx[0]-p.fromPx[0])*t;
+      p.pixelY = p.fromPx[1] + (p.toPx[1]-p.fromPx[1])*t;
+      if(t>=1){
+        p.tileX = p.toTile[0]; p.tileY = p.toTile[1];
+        p.moving = false;
+        onPlayerArrive();
+      }
+    }
+  }
+
+  function onPlayerArrive(){
+    const g = state.grid, x = state.player.tileX, y = state.player.tileY;
+    if(g[y][x]===1){
+      g[y][x] = 2;
+      state.pelletsEaten++;
+      state.score += 10;
+      updateAngerUI();
+      updateHUD();
+      if(state.pelletsEaten >= state.totalPellets){ levelComplete(); }
+    }
+  }
+
+  function chooseWanderDir(mover, g, w, h){
+    const opts = [];
+    const dirs = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
+    for(const d of dirs){
+      if(canMove(g,w,h,mover.tileX+d.x, mover.tileY+d.y)){
+        const isReverse = (d.x===-mover.dir.x && d.y===-mover.dir.y) && (mover.dir.x||mover.dir.y);
+        opts.push({d, weight: isReverse?1:(d.x===mover.dir.x&&d.y===mover.dir.y?4:2)});
+      }
+    }
+    if(opts.length===0) return null;
+    const total = opts.reduce((s,o)=>s+o.weight,0);
+    let r = Math.random()*total;
+    for(const o of opts){ r -= o.weight; if(r<=0) return o.d; }
+    return opts[0].d;
+  }
+
+  function updateVerity(mover, now){
+    const g = state.grid, w = state.w, h = state.h;
+    if(!mover.moving){
+      let dir = null;
+      const anger = state.anger;
+      if(anger === 'mad'){
+        dir = bfsNextStep(g,w,h,[mover.tileX,mover.tileY],[state.player.tileX,state.player.tileY]);
+      } else if(anger === 'upset'){
+        dir = Math.random() < 0.55 ? bfsNextStep(g,w,h,[mover.tileX,mover.tileY],[state.player.tileX,state.player.tileY]) : chooseWanderDir(mover,g,w,h);
+      } else {
+        dir = chooseWanderDir(mover,g,w,h);
+      }
+      if(dir && canMove(g,w,h,mover.tileX+dir.x, mover.tileY+dir.y)){
+        startMove(mover, dir.x, dir.y, now);
+      }
+    }
+    if(mover.moving){
+      const t = Math.min(1, (now-mover.moveStart)/mover.duration);
+      mover.pixelX = mover.fromPx[0] + (mover.toPx[0]-mover.fromPx[0])*t;
+      mover.pixelY = mover.fromPx[1] + (mover.toPx[1]-mover.fromPx[1])*t;
+      if(t>=1){
+        mover.tileX = mover.toTile[0]; mover.tileY = mover.toTile[1];
+        mover.moving = false;
+      }
+    }
+  }
+
+  function checkCollisions(){
+    const p = state.player;
+    for(const v of state.verities){
+      if(v.tileX===p.tileX && v.tileY===p.tileY){ return true; }
+      // pass-through swap collision
+      if(v.moving && p.moving){
+        if(v.fromTile[0]===p.toTile[0] && v.fromTile[1]===p.toTile[1] &&
+           v.toTile[0]===p.fromTile[0] && v.toTile[1]===p.fromTile[1]) return true;
+      }
+    }
+    return false;
+  }
+
+  function loseLife(){
+    state.frozen = true;
+    state.lives--;
+    updateHUD();
+    document.getElementById('caught-text').textContent =
+      state.lives > 0 ? ('Verity got you. Lives remaining: ' + state.lives) : 'Verity got you.';
+    showOverlay('caught');
+    if(state.lives <= 0){
+      setTimeout(()=>{ finishGame(false); }, 1100);
+    } else {
+      setTimeout(()=>{
+        showOverlay(null);
+        resetPositions();
+        state.frozen = false;
+      }, 1100);
+    }
+  }
+
+  function resetPositions(){
+    const ts = state.tileSize;
+    const p = state.player;
+    p.tileX=1; p.tileY=1; p.pixelX=ts; p.pixelY=ts; p.moving=false; p.dir={x:0,y:0};
+    state.keysDesired = {x:0,y:0};
+    for(const v of state.verities){
+      const [sx,sy] = v.startTile;
+      v.tileX=sx; v.tileY=sy; v.pixelX=sx*ts; v.pixelY=sy*ts;
+      v.moving=false; v.dir={x:0,y:0};
+    }
+  }
+
+  function levelComplete(){
+    state.frozen = true; state.running = false;
+    document.getElementById('levelup-title').textContent = 'LEVEL ' + (state.levelIndex+1) + ' CLEAR';
+    const flavors = [
+      "Verity is already dreading the next room.",
+      "He's muttering something about 'respecting the crumbs.'",
+      "One more spotless room and he may actually snap.",
+      "He's pacing. This is not a good sign for you.",
+      "There is no next room. You out-tidied him completely.",
+    ];
+    document.getElementById('levelup-text').textContent = flavors[Math.min(state.levelIndex, flavors.length-1)];
+    showOverlay('levelup');
+  }
+
+  function finishGame(won){
+    state.running = false; state.frozen = true;
+    if(won){
+      document.getElementById('final-score-win').textContent = 'Score: ' + state.score;
+      showOverlay('win');
+    } else {
+      document.getElementById('final-score-lose').textContent = 'Score: ' + state.score;
+      showOverlay('gameover');
+    }
+  }
+
+  function startGame(){
+    state.score = 0; state.lives = START_LIVES;
+    updateHUD();
+    loadLevel(0);
+  }
+
+  // ---------- Rendering ----------
+  function drawGrid(){
+    const g = state.grid, w = state.w, h = state.h, ts = state.tileSize;
+    ctx.fillStyle = COLORS.bg;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = COLORS.wall;
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        if(g[y][x]===0) ctx.fillRect(x*ts, y*ts, ts, ts);
+      }
+    }
+    ctx.fillStyle = COLORS.pellet;
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        if(g[y][x]===1){
+          ctx.beginPath();
+          ctx.arc(x*ts+ts/2, y*ts+ts/2, Math.max(2, ts*0.08), 0, Math.PI*2);
+          ctx.fill();
+        }
+      }
+    }
+  }
+
+  function drawPlayer(now){
+    const p = state.player, ts = state.tileSize;
+    const cx = p.pixelX + ts/2, cy = p.pixelY + ts/2;
+    const r = ts*0.42;
+    const mouthPhase = (Math.sin(now/90) + 1)/2; // 0..1
+    const maxMouth = (p.moving) ? 0.28 : 0.05;
+    const mouthAngle = 0.06 + mouthPhase*maxMouth;
+    let angle = 0;
+    if(p.dir.x===1) angle=0; else if(p.dir.x===-1) angle=Math.PI;
+    else if(p.dir.y===1) angle=Math.PI/2; else if(p.dir.y===-1) angle=-Math.PI/2;
+    ctx.fillStyle = COLORS.player;
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,r, angle+mouthAngle*Math.PI, angle+(2-mouthAngle)*Math.PI);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function roundRectPath(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.lineTo(x+w-r,y);
+    ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+    ctx.lineTo(x+w,y+h-r);
+    ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    ctx.lineTo(x+r,y+h);
+    ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+    ctx.lineTo(x,y+r);
+    ctx.quadraticCurveTo(x,y,x+r,y);
+    ctx.closePath();
+  }
+
+  function drawGridMouth(cx, midY, w, h, fillColor, lineColor, r){
+    const x = cx - w/2, y = midY - h/2;
+    const radius = Math.min(h/2, w*0.12);
+    roundRectPath(x,y,w,h,radius);
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    ctx.save();
+    roundRectPath(x,y,w,h,radius);
+    ctx.clip();
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = Math.max(1, h*0.09);
+    const cols = 4, rows = 2;
+    for(let i=1;i<cols;i++){ const lx=x+(w/cols)*i; ctx.beginPath(); ctx.moveTo(lx,y); ctx.lineTo(lx,y+h); ctx.stroke(); }
+    for(let j=1;j<rows;j++){ const ly=y+(h/rows)*j; ctx.beginPath(); ctx.moveTo(x,ly); ctx.lineTo(x+w,ly); ctx.stroke(); }
+    ctx.restore();
+    roundRectPath(x,y,w,h,radius);
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = Math.max(1, r*0.05);
+    ctx.stroke();
+  }
+
+  const FACE_SKIN = { calm:'#f7d51d', upset:'#d9ab13', mad:'#cca80f' };
+
+  function drawVerityFace(mover, ts){
+    const cx = mover.pixelX + ts/2, cy = mover.pixelY + ts/2;
+    const r = ts*0.44;
+    const anger = state.anger;
+
+    if(anger === 'mad'){
+      const glow = ctx.createRadialGradient(cx,cy,r*0.2,cx,cy,r*1.9);
+      glow.addColorStop(0,'rgba(0,0,0,0.6)');
+      glow.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(cx,cy,r*1.9,0,Math.PI*2); ctx.fill();
+    }
+
+    ctx.fillStyle = FACE_SKIN[anger];
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+    ctx.lineWidth = Math.max(1, r*0.06);
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.stroke();
+
+    const eyeW = r*0.16, eyeH = r*0.32, eyeGap = r*0.42;
+    const eyeY = cy - r*0.12;
+
+    if(anger === 'mad'){
+      ctx.strokeStyle = '#141014'; ctx.lineWidth = Math.max(2, r*0.14); ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(cx-eyeGap-eyeW, eyeY-eyeH*0.35); ctx.lineTo(cx-eyeGap+eyeW, eyeY+eyeH*0.35); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx+eyeGap-eyeW, eyeY+eyeH*0.35); ctx.lineTo(cx+eyeGap+eyeW, eyeY-eyeH*0.35); ctx.stroke();
+    } else {
+      if(anger === 'upset'){
+        const blush = (dx)=>{
+          const bg = ctx.createRadialGradient(cx+dx, eyeY+eyeH*0.4, 1, cx+dx, eyeY+eyeH*0.4, eyeW*2.4);
+          bg.addColorStop(0,'rgba(200,60,40,0.35)');
+          bg.addColorStop(1,'rgba(200,60,40,0)');
+          ctx.fillStyle = bg;
+          ctx.beginPath(); ctx.arc(cx+dx, eyeY+eyeH*0.4, eyeW*2.4, 0, Math.PI*2); ctx.fill();
+        };
+        blush(-eyeGap); blush(eyeGap);
+      }
+      ctx.fillStyle = '#141014';
+      ctx.beginPath(); ctx.ellipse(cx-eyeGap, eyeY, eyeW, eyeH, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx+eyeGap, eyeY, eyeW, eyeH, 0, 0, Math.PI*2); ctx.fill();
+    }
+
+    const mouthY = cy + r*0.3;
+    if(anger === 'calm'){
+      ctx.strokeStyle = '#141014'; ctx.lineWidth = Math.max(2, r*0.12); ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(cx, mouthY - r*0.15, r*0.58, 0.15*Math.PI, 0.85*Math.PI);
+      ctx.stroke();
+    } else if(anger === 'upset'){
+      drawGridMouth(cx, mouthY, r*1.15, r*0.5, '#f2eee6', '#8b8378', r);
+    } else {
+      drawGridMouth(cx, mouthY - r*0.02, r*0.95, r*0.44, '#171217', '#5a5560', r);
+    }
+  }
+
+  function render(now){
+    drawGrid();
+    for(const v of state.verities) drawVerityFace(v, state.tileSize);
+    drawPlayer(now);
+  }
+
+  // ---------- Main loop ----------
+  let lastHiddenAt = 0;
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.hidden){ lastHiddenAt = performance.now(); }
+    else if(lastHiddenAt){
+      const diff = performance.now() - lastHiddenAt;
+      if(state.player) state.player.moveStart += diff;
+      for(const v of state.verities) v.moveStart += diff;
+      lastHiddenAt = 0;
+    }
+  });
+
+  function loop(now){
+    if(state.running && !state.frozen){
+      updatePlayer(now);
+      for(const v of state.verities) updateVerity(v, now);
+      if(checkCollisions()){ loseLife(); }
+    }
+    if(state.grid) render(now);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>

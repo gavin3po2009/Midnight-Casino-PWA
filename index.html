@@ -5,6 +5,25 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#06070d">
 <title>OMNILAUNCHER — Game Launcher</title>
+<script>
+/* PURGE — remove any previously installed service worker + its caches.
+   The old PWA worker was serving a stale cached copy of the site,
+   which is why launcher updates never showed up. */
+(function(){
+  try{
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.getRegistrations().then(function(list){
+        for(var i=0;i<list.length;i++)list[i].unregister();
+      }).catch(function(){});
+    }
+    if(window.caches && caches.keys){
+      caches.keys().then(function(keys){
+        for(var i=0;i<keys.length;i++)caches.delete(keys[i]);
+      }).catch(function(){});
+    }
+  }catch(e){}
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -25,7 +44,6 @@ body{min-height:100vh;background:var(--bg);color:var(--text);font:400 15px/1.5 v
 ::-webkit-scrollbar-thumb{background:var(--line2);border-radius:6px}
 ::-webkit-scrollbar-track{background:transparent}
 
-/* backdrop: grid + glows, then starfield canvas, then vignette */
 body::before{content:'';position:fixed;inset:0;z-index:-3;pointer-events:none;
   background:
     radial-gradient(900px 480px at 75% -12%, rgba(109,242,198,.10), transparent 60%),
@@ -48,7 +66,6 @@ body::before{content:'';position:fixed;inset:0;z-index:-3;pointer-events:none;
 
 .wrap{max-width:1180px;margin:0 auto;padding:26px 22px 40px;position:relative}
 
-/* ---------- header ---------- */
 header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:6px 2px 18px;border-bottom:1px solid var(--line)}
 .brand{display:flex;gap:16px;align-items:center}
 #logo{width:44px;height:32px;image-rendering:crisp-edges;image-rendering:pixelated;filter:drop-shadow(0 0 8px rgba(109,242,198,.45))}
@@ -59,7 +76,6 @@ h1{font:700 clamp(16px,3.2vw,24px)/1 var(--px);letter-spacing:2px;margin:0;text-
 .clock{font:10px var(--px);color:var(--amber);text-shadow:0 0 10px rgba(255,215,106,.3)}
 .chip{font:8px var(--px);color:var(--neon);border:1px solid var(--line2);padding:8px 11px;border-radius:4px;background:rgba(109,242,198,.05)}
 
-/* ---------- toolbar ---------- */
 .toolbar{display:flex;gap:10px;align-items:stretch;margin:18px 0 14px;flex-wrap:wrap}
 .search{flex:1;min-width:200px;display:flex;align-items:center;gap:9px;height:42px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:0 12px;color:var(--faint);transition:border-color .15s,box-shadow .15s}
 .search:focus-within{border-color:var(--neon);box-shadow:0 0 0 1px rgba(109,242,198,.35);color:var(--dim)}
@@ -74,7 +90,6 @@ h1{font:700 clamp(16px,3.2vw,24px)/1 var(--px);letter-spacing:2px;margin:0;text-
 .ibtn:hover{color:var(--neon);border-color:var(--line2)}
 .ibtn.spin{animation:rot .9s linear infinite;color:var(--neon)}
 
-/* ---------- messages / empty ---------- */
 .msg{margin:0 0 14px;padding:10px 14px;border-radius:8px;font:600 12.5px var(--ui);letter-spacing:.03em;border:1px solid var(--line);background:var(--panel);color:var(--dim)}
 .msg.warn{color:var(--amber);border-color:rgba(255,215,106,.35)}
 .msg.load{color:var(--neon);border-color:rgba(109,242,198,.3)}
@@ -85,7 +100,6 @@ h1{font:700 clamp(16px,3.2vw,24px)/1 var(--px);letter-spacing:2px;margin:0;text-
 .empty code{background:var(--panel2);border:1px solid var(--line);padding:2px 7px;border-radius:4px;font:600 12px ui-monospace,monospace;color:var(--neon)}
 .empty .fine{margin-top:16px;color:var(--faint);font-size:13px;line-height:1.7;max-width:560px;margin-inline:auto}
 
-/* ---------- grid & cards ---------- */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:18px}
 .card{position:relative;background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:10px;overflow:hidden;cursor:pointer;outline:none;transition:transform .16s ease,border-color .16s,box-shadow .16s}
 .card:hover,.card:focus-visible{transform:translateY(-5px);border-color:var(--ac,var(--neon));box-shadow:0 16px 34px -14px rgba(0,0,0,.8),0 0 22px -4px var(--acs,rgba(109,242,198,.4))}
@@ -110,17 +124,14 @@ h1{font:700 clamp(16px,3.2vw,24px)/1 var(--px);letter-spacing:2px;margin:0;text-
 .body .desc{margin:7px 0 0;color:var(--faint);font-size:12px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .meta{margin:9px 0 0;font:500 11px var(--ui);color:var(--faint);letter-spacing:.06em;display:flex;gap:9px;flex-wrap:wrap;align-items:center}
 .meta .fname{color:var(--dim);font-family:ui-monospace,Menlo,monospace;font-size:10.5px}
-/* skeletons */
 .skel{pointer-events:none}
 .skel .art{border:0;background:linear-gradient(100deg,var(--panel) 30%,var(--panel2) 50%,var(--panel) 70%);background-size:220% 100%;animation:shimmer 1.4s linear infinite}
 .skel .body::before{content:'';display:block;height:10px;width:70%;background:var(--line);margin-bottom:10px;border-radius:3px}
 .skel .body::after{content:'';display:block;height:8px;width:45%;background:var(--line);border-radius:3px}
 
-/* ---------- footer ---------- */
 footer{margin-top:26px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;color:var(--faint);font:500 11.5px var(--ui);letter-spacing:.05em}
 footer b{color:var(--dim)}
 
-/* ---------- player overlay ---------- */
 #player{position:fixed;inset:0;z-index:1000;background:#000;display:flex;flex-direction:column}
 #player[hidden]{display:none}
 .pbar{display:flex;align-items:center;gap:10px;height:46px;padding:0 10px 0 6px;background:rgba(10,13,24,.97);border-bottom:1px solid var(--line);flex:none}
@@ -200,7 +211,7 @@ footer b{color:var(--dim)}
 
   <footer>
     <div id="srcInfo">LIBRARY · —</div>
-    <div class="keys">CLICK A GAME TO PLAY FULLSCREEN · <b>ESC</b> RETURNS HERE · <b>BUILD 3</b></div>
+    <div class="keys">CLICK A GAME TO PLAY FULLSCREEN · <b>ESC</b> RETURNS HERE · <b>BUILD 4</b></div>
   </footer>
 </div>
 
@@ -224,17 +235,7 @@ footer b{color:var(--dim)}
 'use strict';
 
 /* =====================================================================
-   CONFIG — tweak me
-   ---------------------------------------------------------------------
-   Games are discovered from several sources, merged in priority order:
-     1. CONFIG.games below          (always wins — good for local files)
-     2. games.json next to launcher ([{"file":"Foo.html","title":"Foo"}])
-     3. GitHub repo scan            (API listing of .html files)
-     4. Direct file probing         (HEAD-checks the filenames below on
-                                    the LIVE site — works even when the
-                                    API is unavailable, rate-limited, or
-                                    the repo is private. Add your game
-                                    filenames here any time.)
+   CONFIG
    ===================================================================== */
 const CONFIG={
   title:'OMNILAUNCHER',
@@ -266,7 +267,7 @@ const LAUNCHER_FILE=(()=>{const p=location.pathname.split('/').filter(Boolean);c
 /* ---------- state ---------- */
 let GAMES=[], REPO_LABEL='', sortMode='az';
 try{sortMode=localStorage.getItem('arcade.sort')||'az'}catch(e){sortMode='az'}
-const STATS_KEY='arcade.stats.v1', CACHE_KEY='arcade.library.v4';
+const STATS_KEY='arcade.stats.v1', CACHE_KEY='arcade.library.v5';
 let stats={};
 try{stats=JSON.parse(localStorage.getItem(STATS_KEY))||{}}catch(e){}
 function saveStats(){try{localStorage.setItem(STATS_KEY,JSON.stringify(stats))}catch(e){}}
@@ -287,10 +288,7 @@ function setMsg(text,kind){
   msgEl.textContent=text;msgEl.className='msg '+(kind||'');msgEl.hidden=false;
 }
 
-/* ---------- repo detection ----------
-   CONFIG.repo is pinned, so this works on omnilauncher.link AND on
-   gavin3po2009.github.io/Midnight-Casino-PWA/ (where the leading path
-   segment is the repo name and must be stripped before scanning). */
+/* ---------- repo detection ---------- */
 function detectRepo(){
   const segs=location.pathname.split('/').filter(Boolean).map(dec);
   if(segs.length&&/\.html?$/i.test(segs[segs.length-1]))segs.pop();
@@ -305,7 +303,7 @@ function detectRepo(){
       return{owner:parts[0],repo:parts[1],dir:rest.join('/')};
     }
   }
-  if(!ghOwner)return null; /* custom domain without CONFIG.repo — cannot auto-detect */
+  if(!ghOwner)return null;
   if(!segs.length)return{owner:ghOwner,repo:ghOwner+'.github.io',dir:''};
   return{owner:ghOwner,repo:segs[0],dir:segs.slice(1).join('/')};
 }
@@ -314,7 +312,7 @@ function detectRepo(){
 async function ghContents(owner,repo,dir){
   const path=dir?dir.split('/').map(encodeURIComponent).join('/'):'';
   const url='https://api.github.com/repos/'+encodeURIComponent(owner)+'/'+encodeURIComponent(repo)+'/contents'+(path?'/'+path:'');
-  const res=await fetch(url,{headers:{'Accept':'application/vnd.github.v3+json'}});
+  const res=await fetch(url,{headers:{'Accept':'application/vnd.github.v3+json'},cache:'no-store'});
   if(res.status===403||res.status===429)throw{rateLimited:true};
   if(res.status===404)throw{notFound:true};
   if(!res.ok)throw{status:res.status};
@@ -340,7 +338,7 @@ async function validateGames(games){
     let ok=true;
     try{
       const u=new URL(g.url);
-      if(u.origin===location.origin){const r=await fetch(g.url,{method:'HEAD'});ok=r.ok}
+      if(u.origin===location.origin){const r=await fetch(g.url,{method:'HEAD',cache:'no-store'});ok=r.ok}
     }catch(e){ok=true}
     if(ok)out.push(g);
   }));
@@ -401,10 +399,7 @@ async function loadGamesJson(){
   return[];
 }
 
-/* ---------- DIRECT FILE PROBE — the guaranteed fallback ----------
-   HEAD-checks known filenames on the LIVE site. Independent of the
-   GitHub API, so it works for private repos, rate limits, blocked
-   requests, or any static host. A hit IS the validation. */
+/* ---------- DIRECT FILE PROBE — the guaranteed fallback ---------- */
 async function probeLive(){
   if(!IS_HTTP)return[];
   const found=[],seen=new Set();
@@ -416,7 +411,7 @@ async function probeLive(){
       seen.add(url);
       jobs.push((async()=>{
         try{
-          const r=await fetch(url,{method:'HEAD'});
+          const r=await fetch(url,{method:'HEAD',cache:'no-store'});
           if(r.ok&&!found.some(g=>g.url===url)){
             found.push({url:url,file:name,title:prettify(name),source:'probe'});
           }
@@ -425,7 +420,6 @@ async function probeLive(){
     }
   }
   await Promise.all(jobs);
-  /* dedupe case-variants pointing at the same file (keep first) */
   const out=[],lower=new Set();
   for(const g of found){
     const k=g.url.toLowerCase();
@@ -468,7 +462,7 @@ async function decorate(games){
   }));
 }
 
-/* ---------- library cache (survives GitHub API rate limits) ---------- */
+/* ---------- library cache ---------- */
 function packGame(g){return{u:g.url,f:g.file,ti:g.title,de:g.desc,s:g.size}}
 function unpackGame(o){return{url:o.u,file:o.f||'game',title:o.ti||prettify(o.f||'game'),desc:o.de,size:o.s,source:'cache'}}
 function loadCache(){try{const d=JSON.parse(localStorage.getItem(CACHE_KEY));if(d&&Array.isArray(d.list))return d}catch(e){}return null}
@@ -496,7 +490,7 @@ async function discover(force){
   try{
     const res=await gather();
     if(res.info)REPO_LABEL=res.info.owner+'/'+res.info.repo;
-    try{console.info('[OMNILAUNCHER b3] repo:',res.info?REPO_LABEL:'none',
+    try{console.info('[OMNILAUNCHER b4] repo:',res.info?REPO_LABEL:'none',
       '| api:',res.apiErr?(res.apiErr.rateLimited?'rate-limited':res.apiErr.notFound?'not-listable':res.apiErr.noRepo?'no-repo':'error'):'ok',
       '| probe hits:',res.probed,'| games:',res.list.length)}catch(e){}
     if(res.list.length>0){
@@ -528,7 +522,7 @@ async function discover(force){
     }
   }catch(e){
     note='SCAN FAILED — NETWORK?';noteKind='warn';
-    try{console.warn('[OMNILAUNCHER b3]',e)}catch(_){}
+    try{console.warn('[OMNILAUNCHER b4]',e)}catch(_){}
   }
   refreshBtn.classList.remove('spin');
   renderAll();
@@ -541,7 +535,7 @@ function renderSkeleton(){
 }
 
 /* =====================================================================
-   CARD ART — procedural pixel thumbnails, unique per game
+   CARD ART
    ===================================================================== */
 const ART_W=160,ART_H=90;
 const PALETTES=[
@@ -783,7 +777,7 @@ function buildEmpty(q){
   const ol=document.createElement('ol');
   const items=[
     'Commit your game <code>.html</code> files next to <code>index.html</code> in the repo (a <code>games/</code> subfolder works too).',
-    'Quick check — open <code>https://'+location.hostname+'/Gambling.html</code> directly: if that page loads, the launcher will find it; if it 404s, the file isn\'t deployed yet.',
+    'Quick check — open <code>https://'+location.hostname+'/gambling.html</code> directly: if that page loads, the launcher will find it; if it 404s, the file isn\'t deployed yet.',
     'Wait ~30s for GitHub Pages, then press <b>⟳ RESCAN</b> (and hard-refresh with <b>Ctrl+Shift+R</b> if the page looks stale).'
   ];
   items.forEach(t=>{const li=document.createElement('li');li.innerHTML=t;ol.appendChild(li)});
@@ -813,16 +807,6 @@ function renderAll(){
 
 /* =====================================================================
    PLAYER — fullscreen game hosting
-   ---------------------------------------------------------------------
-   • a brand-new iframe is created for every launch and removed on
-     close (no reused iframe, no about:blank reset, no dead navigations)
-   • the fullscreen request is made on an already-rendered element and
-     every failure path (rejection / fullscreenerror / unsupported) is
-     handled — worst case the game fills the viewport in-page
-   • exiting fullscreen (Esc) returns you straight to the library:
-     one press, one result, no stacked overlays
-   • a session guard blocks double-clicks; a slow-load panel offers
-     RETRY / OPEN IN TAB / BACK so it can never hang on "LOADING"
    ===================================================================== */
 let session=null;
 
@@ -852,13 +836,11 @@ function onFsChange(){
   const fs=isFs();
   player.classList.toggle('fs',fs);
   if(fs){focusSoon();return}
-  /* fullscreen just exited (user pressed Esc / browser left FS):
-     return straight back to the library — no lingering overlay */
   if(session&&!session.closing)closeGame();
 }
 function onFsError(){
   if(isFs())return;
-  player.classList.remove('fs'); /* keep the bar visible so the game stays playable windowed */
+  player.classList.remove('fs');
 }
 document.addEventListener('fullscreenchange',onFsChange);
 document.addEventListener('webkitfullscreenchange',onFsChange);
@@ -890,7 +872,7 @@ function showSlowUI(){
 }
 function mountFrame(url){
   const s=session;if(!s)return;
-  if(s.frame){ /* drop any previous frame entirely */
+  if(s.frame){
     s.frame.removeEventListener('load',onFrameLoad);
     try{s.frame.parentNode.removeChild(s.frame)}catch(e){}
     s.frame=null;
@@ -901,8 +883,8 @@ function mountFrame(url){
   f.setAttribute('allow','fullscreen; autoplay');
   f.setAttribute('allowfullscreen','');
   f.addEventListener('load',onFrameLoad);
-  f.src=url;               /* set before insertion → exactly one real navigation */
-  stage.insertBefore(f,pLoad); /* pLoad (z-index 3) stays on top while loading */
+  f.src=url;
+  stage.insertBefore(f,pLoad);
   s.frame=f;
   clearTimeout(s.slowTimer);
   s.slowTimer=setTimeout(()=>{if(session&&!session.loaded)showSlowUI()},12000);
@@ -910,9 +892,8 @@ function mountFrame(url){
 function onFrameLoad(){
   const s=session;if(!s||!s.frame)return;
   try{
-    /* ignore the iframe's initial about:blank document, if any */
     if(s.frame.contentWindow.location.href==='about:blank')return;
-  }catch(e){/* cross-origin game — treat as loaded */}
+  }catch(e){}
   s.loaded=true;
   clearTimeout(s.slowTimer);
   pLoad.hidden=true;
@@ -925,7 +906,7 @@ function reloadGame(){
   mountFrame(s.game.url);
 }
 function openGame(g){
-  if(session)return; /* already running — stray/double clicks are ignored */
+  if(session)return;
   ensureDecor(g);
   bumpStats(g);
   session={game:g,closing:false,loaded:false,frame:null,slowTimer:0};
@@ -933,31 +914,30 @@ function openGame(g){
   buildLoadingUI(g);
   pLoad.hidden=false;
   player.hidden=false;
-  void player.offsetHeight;   /* force layout so the fullscreen request targets a rendered element */
+  void player.offsetHeight;
   mountFrame(g.url);
-  goFullscreen();             /* same click gesture → allowed */
+  goFullscreen();
   focusSoon();
 }
 function closeGame(){
   const s=session;
   if(!s)return;
-  session=null;               /* block re-entry instantly */
+  session=null;
   s.closing=true;
   clearTimeout(s.slowTimer);
-  if(isFs())exitFs();         /* exit BEFORE hiding the fullscreen element */
+  if(isFs())exitFs();
   if(s.frame){
     s.frame.removeEventListener('load',onFrameLoad);
-    try{s.frame.parentNode.removeChild(s.frame)}catch(e){} /* kills the game's loops & audio */
+    try{s.frame.parentNode.removeChild(s.frame)}catch(e){}
   }
   pLoad.hidden=true;
   pLoad.textContent='';
   player.classList.remove('fs');
   player.hidden=true;
   document.body.style.overflow='';
-  renderGrid();               /* refresh ×N / LAST badges */
+  renderGrid();
 }
 
-/* ---------- player input ---------- */
 pBack.addEventListener('click',closeGame);
 pClose.addEventListener('click',closeGame);
 pFs.addEventListener('click',()=>{isFs()?exitFs():goFullscreen()});
@@ -966,7 +946,6 @@ document.addEventListener('keydown',e=>{
   const tag=(document.activeElement&&document.activeElement.tagName)||'';
   if(tag==='INPUT'||tag==='TEXTAREA')return;
   if(e.key==='Escape'){
-    /* in fullscreen the browser itself exits on Esc → onFsChange closes the game */
     if(!isFs())closeGame();
   }else if(e.key==='f'||e.key==='F'){
     e.preventDefault();
@@ -1023,7 +1002,6 @@ function tick(){
 }
 setInterval(tick,1000);tick();
 
-/* ---------- toolbar wiring ---------- */
 searchEl.addEventListener('input',renderGrid);
 document.querySelectorAll('#sortSeg button').forEach(b=>{
   b.addEventListener('click',()=>{
@@ -1036,7 +1014,6 @@ document.querySelectorAll('#sortSeg button').forEach(b=>{
 document.querySelectorAll('#sortSeg button').forEach(b=>b.classList.toggle('on',b.dataset.sort===sortMode));
 refreshBtn.addEventListener('click',()=>discover(true));
 
-/* redraw card art once the pixel font is really loaded */
 function redrawArt(){for(const job of artJobs)drawArt(job[0],job[1])}
 if(document.fonts&&document.fonts.load){
   document.fonts.load('24px "Press Start 2P"').then(redrawArt).catch(()=>{});
@@ -1047,7 +1024,7 @@ if(document.fonts&&document.fonts.load){
  $('brandTitle').textContent=CONFIG.title;
 document.title=CONFIG.title+' — Game Launcher';
 if(!fsSupported())pFs.style.display='none';
-try{console.info('[OMNILAUNCHER] build 3 running on '+location.href)}catch(e){}
+try{console.info('[OMNILAUNCHER] build 4 running on '+location.href)}catch(e){}
 discover(false);
 })();
 </script>
