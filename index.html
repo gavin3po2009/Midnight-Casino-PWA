@@ -5,25 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#06070d">
 <title>OMNILAUNCHER — Game Launcher</title>
-<script>
-/* PURGE — remove any previously installed service worker + its caches.
-   The old PWA worker was serving a stale cached copy of the site,
-   which is why launcher updates never showed up. */
-(function(){
-  try{
-    if('serviceWorker' in navigator){
-      navigator.serviceWorker.getRegistrations().then(function(list){
-        for(var i=0;i<list.length;i++)list[i].unregister();
-      }).catch(function(){});
-    }
-    if(window.caches && caches.keys){
-      caches.keys().then(function(keys){
-        for(var i=0;i<keys.length;i++)caches.delete(keys[i]);
-      }).catch(function(){});
-    }
-  }catch(e){}
-})();
-</script>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -75,6 +58,8 @@ h1{font:700 clamp(16px,3.2vw,24px)/1 var(--px);letter-spacing:2px;margin:0;text-
 .hstats{display:flex;gap:10px;align-items:center}
 .clock{font:10px var(--px);color:var(--amber);text-shadow:0 0 10px rgba(255,215,106,.3)}
 .chip{font:8px var(--px);color:var(--neon);border:1px solid var(--line2);padding:8px 11px;border-radius:4px;background:rgba(109,242,198,.05)}
+#installBtn{cursor:pointer;transition:.15s}
+#installBtn:hover{background:var(--neon);color:#06070d;border-color:var(--neon)}
 
 .toolbar{display:flex;gap:10px;align-items:stretch;margin:18px 0 14px;flex-wrap:wrap}
 .search{flex:1;min-width:200px;display:flex;align-items:center;gap:9px;height:42px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:0 12px;color:var(--faint);transition:border-color .15s,box-shadow .15s}
@@ -182,6 +167,7 @@ footer b{color:var(--dim)}
     </div>
     <div class="hstats">
       <div class="clock" id="clock">--:--</div>
+      <button class="chip" id="installBtn" type="button" hidden>⤓ INSTALL</button>
       <div class="chip" id="gameCount">… GAMES</div>
     </div>
   </header>
@@ -211,7 +197,7 @@ footer b{color:var(--dim)}
 
   <footer>
     <div id="srcInfo">LIBRARY · —</div>
-    <div class="keys">CLICK A GAME TO PLAY FULLSCREEN · <b>ESC</b> RETURNS HERE · <b>BUILD 4</b></div>
+    <div class="keys">CLICK A GAME TO PLAY FULLSCREEN · <b>ESC</b> RETURNS HERE · <b>BUILD 5</b></div>
   </footer>
 </div>
 
@@ -256,13 +242,37 @@ const $=id=>document.getElementById(id);
 const grid=$('grid'), emptyEl=$('empty'), msgEl=$('msg'), searchEl=$('search'),
       countEl=$('gameCount'), srcEl=$('srcInfo'), refreshBtn=$('refreshBtn'),
       player=$('player'), stage=$('stage'), pTitle=$('pTitle'), pLoad=$('pLoad'),
-      pFs=$('pFs'), pBack=$('pBack'), pClose=$('pClose'), clockEl=$('clock');
+      pFs=$('pFs'), pBack=$('pBack'), pClose=$('pClose'), clockEl=$('clock'),
+      installBtn=$('installBtn');
 
 const IS_HTTP=location.protocol==='https:'||location.protocol==='http:';
 const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
 function dec(s){try{return decodeURIComponent(s)}catch(e){return s}}
 function resolveUrl(rel){try{return new URL(rel,location.href).href}catch(e){return rel}}
 const LAUNCHER_FILE=(()=>{const p=location.pathname.split('/').filter(Boolean);const last=p.length?dec(p[p.length-1]):'';return/\.html?$/i.test(last)?last.toLowerCase():'index.html'})();
+
+/* ---------- PWA: register the offline service worker ---------- */
+if('serviceWorker' in navigator && IS_HTTP){
+  addEventListener('load',function(){
+    navigator.serviceWorker.register('sw.js').catch(function(e){
+      try{console.warn('[OMNILAUNCHER] SW registration failed',e)}catch(_){}
+    });
+  });
+}
+/* install prompt */
+let installPrompt=null;
+window.addEventListener('beforeinstallprompt',function(e){
+  e.preventDefault();
+  installPrompt=e;
+  installBtn.hidden=false;
+});
+installBtn.addEventListener('click',function(){
+  if(!installPrompt)return;
+  installPrompt.prompt();
+  installPrompt.userChoice.then(function(){installPrompt=null;installBtn.hidden=true}).catch(function(){});
+});
+window.addEventListener('appinstalled',function(){installBtn.hidden=true});
+if(matchMedia('(display-mode: standalone)').matches)installBtn.hidden=true;
 
 /* ---------- state ---------- */
 let GAMES=[], REPO_LABEL='', sortMode='az';
@@ -399,7 +409,7 @@ async function loadGamesJson(){
   return[];
 }
 
-/* ---------- DIRECT FILE PROBE — the guaranteed fallback ---------- */
+/* ---------- DIRECT FILE PROBE ---------- */
 async function probeLive(){
   if(!IS_HTTP)return[];
   const found=[],seen=new Set();
@@ -484,13 +494,18 @@ async function discover(force){
     renderSkeleton();
   }
   if(!force&&cacheAge<CONFIG.cacheMinutes*60000){setMsg('');return}
+  if(navigator.onLine===false){ /* offline: keep saved library, skip network */
+    if(!cached){GAMES=[];renderAll()}
+    setMsg('OFFLINE — SHOWING SAVED LIBRARY','warn');
+    return;
+  }
   setMsg('SCANNING','load');
   refreshBtn.classList.add('spin');
   let note='',noteKind='';
   try{
     const res=await gather();
     if(res.info)REPO_LABEL=res.info.owner+'/'+res.info.repo;
-    try{console.info('[OMNILAUNCHER b4] repo:',res.info?REPO_LABEL:'none',
+    try{console.info('[OMNILAUNCHER b5] repo:',res.info?REPO_LABEL:'none',
       '| api:',res.apiErr?(res.apiErr.rateLimited?'rate-limited':res.apiErr.notFound?'not-listable':res.apiErr.noRepo?'no-repo':'error'):'ok',
       '| probe hits:',res.probed,'| games:',res.list.length)}catch(e){}
     if(res.list.length>0){
@@ -522,7 +537,7 @@ async function discover(force){
     }
   }catch(e){
     note='SCAN FAILED — NETWORK?';noteKind='warn';
-    try{console.warn('[OMNILAUNCHER b4]',e)}catch(_){}
+    try{console.warn('[OMNILAUNCHER b5]',e)}catch(_){}
   }
   refreshBtn.classList.remove('spin');
   renderAll();
@@ -533,6 +548,10 @@ function renderSkeleton(){
   for(let i=0;i<6;i++){const d=document.createElement('div');d.className='card skel';d.innerHTML='<div class="art"></div><div class="body"></div>';grid.appendChild(d)}
   countEl.textContent='… GAMES';
 }
+addEventListener('online',function(){setMsg('');discover(true)});
+addEventListener('offline',function(){
+  if(GAMES.length)setMsg('OFFLINE — SHOWING SAVED LIBRARY','warn');
+});
 
 /* =====================================================================
    CARD ART
@@ -1024,7 +1043,7 @@ if(document.fonts&&document.fonts.load){
  $('brandTitle').textContent=CONFIG.title;
 document.title=CONFIG.title+' — Game Launcher';
 if(!fsSupported())pFs.style.display='none';
-try{console.info('[OMNILAUNCHER] build 4 running on '+location.href)}catch(e){}
+try{console.info('[OMNILAUNCHER] build 5 running on '+location.href)}catch(e){}
 discover(false);
 })();
 </script>
