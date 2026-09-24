@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stock Quest</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
+<style>
+:root{--l:#dbe8ad;--m:#a9c060;--d:#3b6427;--k:#122c12;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--l:#1c3a1c;--m:#0d200d;--d:#8fb45a;--k:#cfe39a}}
+:root[data-theme="dark"]{--l:#1c3a1c;--m:#0d200d;--d:#8fb45a;--k:#cfe39a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--m);color:var(--k);font:11px/1.7 "Press Start 2P","Courier New",monospace;-webkit-font-smoothing:none}
+#app{max-width:640px;margin:0 auto;padding:14px 14px 28px}
+h1{font-size:18px;margin:6px 0 2px;line-height:1.3}
+.sub{color:var(--k);margin:0 0 12px;font-size:10px}
+.box{background:var(--l);margin:4px;padding:10px 12px;box-shadow:0 -4px 0 var(--k),0 4px 0 var(--k),-4px 0 0 var(--k),4px 0 0 var(--k)}
+.hudw{position:sticky;top:env(safe-area-inset-top,0px);z-index:2;background:var(--m);padding:4px 0 10px}
+.hud{display:grid;grid-template-columns:auto 1fr 1fr;gap:12px}
+.hud span{display:block;color:var(--d);font-size:10px}
+.hud b{font-weight:400;font-size:13px}
+.bar{display:flex;gap:2px;margin-top:10px}
+.bar i{flex:1;height:10px;background:var(--m)}
+.bar i.on{background:var(--k)}
+.goal{font-size:10px;margin-top:6px;color:var(--d)}
+.news p{margin:0}.news .s{color:var(--d);font-size:10px;margin-top:4px}
+.list{display:grid;gap:12px;margin-top:14px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.row+.row{margin-top:10px}
+.nm{display:flex;align-items:center;gap:10px}
+.spr{width:32px;height:32px;flex:none}
+.nm b{display:block;font-weight:400;font-size:11px}
+.nm small{font-size:10px;color:var(--d)}
+.pr{text-align:right}.pr b{display:block;font-weight:400;font-size:13px}.pr small{font-size:10px}
+.own{display:flex;align-items:center;gap:10px;font-size:10px;min-width:0}
+.sp{width:72px;height:22px;flex:none}
+.btns{display:flex;gap:4px;flex:none}
+button{font:inherit;font-size:10px;line-height:1.4;cursor:pointer;border:0;margin:4px;padding:8px 9px;background:var(--l);color:var(--k);box-shadow:0 -3px 0 var(--k),0 3px 0 var(--k),-3px 0 0 var(--k),3px 0 0 var(--k)}
+button:hover:not(:disabled){background:var(--k);color:var(--l)}
+button:active:not(:disabled){transform:translateY(2px)}
+button:disabled{opacity:.4;cursor:default}
+button:focus-visible{outline:3px dashed var(--k);outline-offset:6px}
+.dockw{position:sticky;bottom:0;background:var(--m);padding:10px 0 calc(6px + env(safe-area-inset-bottom,0px));margin-top:8px}
+.next{display:block;width:calc(100% - 8px);padding:14px;font-size:13px;background:var(--k);color:var(--l);box-shadow:0 -4px 0 var(--d),0 4px 0 var(--d),-4px 0 0 var(--d),4px 0 0 var(--d)}
+.next:hover:not(:disabled){background:var(--d);color:var(--l)}
+.end h2{font-size:14px;margin:0 0 8px;line-height:1.4}.end p{margin:6px 0}
+.tip{margin:12px 6px}
+footer{margin:10px 4px 0;font-size:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+@media(max-width:460px){.row{flex-wrap:wrap}.btns{width:100%}.btns button{flex:1;padding:8px 4px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const KEY='stockquest_v1',DAYS=30,START=1000,GOAL=1500;
+const ST=[
+{id:'PZZA',name:'Pizza Palace',vol:.03,p:40,risk:'Steady'},
+{id:'BEAN',name:'Bean Scene',vol:.03,p:20,risk:'Steady'},
+{id:'PETS',name:'Pet Pals',vol:.04,p:25,risk:'Steady'},
+{id:'FARM',name:'Sunny Farms',vol:.04,p:35,risk:'Steady'},
+{id:'BRT',name:'Bright Energy',vol:.06,p:60,risk:'Medium'},
+{id:'SKY',name:'Sky Air',vol:.06,p:50,risk:'Medium'},
+{id:'CLD',name:'Cloud Nine',vol:.08,p:45,risk:'Bumpy'},
+{id:'PXL',name:'Pixel Games',vol:.09,p:30,risk:'Bumpy'},
+{id:'GOLD',name:'Gold Rush',vol:.11,p:70,risk:'Wild'},
+{id:'RKT',name:'Rocket Labs',vol:.14,p:15,risk:'Wild'}];
+const SPR={
+PZZA:'########|########|.#.##.#.|.######.|..#.##..|..####..|...##...|....#...',
+BEAN:'..#..#..|.#..#...|........|######..|######.#|######.#|.#####..|..###...',
+PETS:'.##..##.|.##..##.|#..##..#|#..##..#|..####..|.######.|.######.|..#..#..',
+FARM:'........|##....##|###..###|.##..##.|..####..|...##...|...##...|..####..',
+BRT:'...####.|..###...|.###....|#######.|...###..|..###...|.##.....|#.......',
+SKY:'...#....|...##...|#######.|########|#######.|...##...|...#....|........',
+CLD:'........|...##...|..####..|.#######|########|########|.######.|........',
+PXL:'........|########|#.#..#.#|###.#..#|#.#..#.#|########|##....##|........',
+GOLD:'........|..####..|.######.|########|.######.|..####..|...##...|....#...',
+RKT:'...##...|..####..|..#..#..|..####..|..####..|.######.|.##..##.|...##...'};
+const UP=['# just launched a hit new product!','Customers are flocking to #.','# beat expectations this season.'];
+const DN=['# is recalling a product.','A big customer just left #.','# had a rough few months.'];
+const TIPS=['Buy low, sell high. Nobody knows the future, so do not bet it all on one company.',
+'Owning a few different companies helps if one has a bad day.',
+'Wild stocks can jump a lot, up or down. Steady ones move slowly.',
+'You only make or lose money when a price changes.',
+'Doing nothing is a move too. Sometimes waiting is best.',
+'Selling locks in your gain or your loss.'];
+const $=id=>document.getElementById(id);
+const money=n=>'$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+let canSave=true,armed=false,S;
+
+function mkNews(){
+  if(Math.random()>.65)return null;
+  const x=ST[Math.random()*ST.length|0],up=Math.random()<.5,t=up?UP:DN;
+  return{id:x.id,up,ok:Math.random()<.75,text:t[Math.random()*t.length|0].replace('#',x.name)};
+}
+function fresh(k){
+  const s={day:1,cash:START,own:{},price:{},hist:{},news:null,done:false,best:k?k.best:0,seasons:k?k.seasons:0};
+  ST.forEach(x=>{s.own[x.id]=0;s.price[x.id]=x.p;s.hist[x.id]=[x.p]});
+  s.news=mkNews();return s;
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));canSave=true}catch(e){canSave=false}}
+function load(){
+  try{
+    const s=JSON.parse(localStorage.getItem(KEY));
+    if(s&&typeof s.cash==='number'&&s.price&&s.hist&&s.own){
+      ST.forEach(x=>{if(!(s.price[x.id]>0)||!Array.isArray(s.hist[x.id])){s.price[x.id]=x.p;s.hist[x.id]=[x.p];s.own[x.id]=0}if(!(s.own[x.id]>=0))s.own[x.id]=0});
+      return s;
+    }
+  }catch(e){canSave=false}
+  return fresh();
+}
+const worth=()=>S.cash+ST.reduce((a,x)=>a+S.own[x.id]*S.price[x.id],0);
+
+function buy(id){
+  const p=S.price[id];if(S.done||S.cash<p)return;
+  S.cash=Math.round((S.cash-p)*100)/100;S.own[id]++;save();render();
+}
+function sell(id,all){
+  const q=all?S.own[id]:Math.min(1,S.own[id]);if(S.done||!q)return;
+  S.cash=Math.round((S.cash+q*S.price[id])*100)/100;S.own[id]-=q;save();render();
+}
+function next(){
+  if(S.done)return;
+  ST.forEach(x=>{
+    let c=(Math.random()*2-1)*x.vol+.003;const n=S.news;
+    if(n&&n.id===x.id){c=((n.up===n.ok)?1:-1)*(.04+Math.random()*x.vol)}
+    const p=Math.max(1,Math.round(S.price[x.id]*(1+c)*100)/100);
+    S.price[x.id]=p;const h=S.hist[x.id];h.push(p);if(h.length>12)h.shift();
+  });
+  if(S.day>=DAYS){S.done=true;S.news=null;S.seasons++;S.best=Math.max(S.best,Math.round(worth()))}
+  else{S.day++;S.news=mkNews()}
+  save();render();
+}
+
+function spr(id){
+  let d='';SPR[id].split('|').forEach((r,y)=>{for(let x=0;x<8;x++)if(r[x]==='#')d+='M'+x+' '+y+'h1v1h-1z'});
+  return '<svg class="spr" viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true"><path d="'+d+'" fill="currentColor"/></svg>';
+}
+function spark(h){
+  const mn=Math.min(...h),mx=Math.max(...h),r=mx-mn||1;let s='';
+  h.forEach((v,i)=>{const t=4+Math.round((v-mn)/r*16);s+='<rect x="'+(i*6)+'" y="'+(22-t)+'" width="5" height="'+t+'" fill="var(--'+(i===h.length-1?'k':'d')+')"/>'});
+  return '<svg class="sp" viewBox="0 0 72 22" shape-rendering="crispEdges" aria-hidden="true">'+s+'</svg>';
+}
+function card(x){
+  const h=S.hist[x.id],p=S.price[x.id],prev=h.length>1?h[h.length-2]:p,d=p-prev,o=S.own[x.id];
+  return `<div class="box"><div class="row"><div class="nm">${spr(x.id)}<div><b>${x.name}</b><small>${x.id}, ${x.risk}</small></div></div>
+<div class="pr"><b>${money(p)}</b><small>${d===0?'no change':(d>0?'+':'-')+money(Math.abs(d))}</small></div></div>
+<div class="row"><div class="own">${spark(h)}<span>Own ${o}${o?' ('+money(o*p)+')':''}</span></div>
+<div class="btns"><button data-a="buy" data-id="${x.id}" ${S.done||S.cash<p?'disabled':''}>Buy 1</button><button data-a="sell" data-id="${x.id}" ${S.done||!o?'disabled':''}>Sell 1</button><button data-a="all" data-id="${x.id}" ${S.done||!o?'disabled':''}>Sell all</button></div></div></div>`;
+}
+function endCard(w){
+  const g=w>=GOAL,m=w>=START,diff=Math.abs(w-START);
+  return `<div class="box end"><h2>${g?'You hit the goal!':m?'You made money!':'Tough season.'}</h2>
+<p>You finished with ${money(w)} (${m?'+':'-'}${money(diff)}).</p>
+<p>${g?'Nice work. Patience and a mix of companies paid off.':m?'Not bad. Play again and try to reach $1,500.':'It happens to everyone. Next time, spread your money across a few companies.'}</p>
+<button class="next" data-a="new">New season</button></div>`;
+}
+function render(){
+  const w=worth(),pct=Math.max(0,Math.min(100,(w-START)/(GOAL-START)*100)),on=Math.round(pct/5);
+  $('app').innerHTML=`<h1>Stock Quest</h1><p class="sub">Turn $1,000 into $1,500 in 30 days.</p>
+<div class="hudw"><div class="box"><div class="hud"><div><span>Day</span><b>${S.day}/${DAYS}</b></div><div><span>Cash</span><b>${money(S.cash)}</b></div><div><span>Worth</span><b>${money(w)}</b></div></div>
+<div class="bar" role="progressbar" aria-label="Progress to goal" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct)}">${Array.from({length:20},(_,i)=>'<i class="'+(i<on?'on':'')+'"></i>').join('')}</div>
+<div class="goal">Goal: ${money(GOAL)}</div></div></div>
+${S.done?endCard(w):`<div class="box news"><p>${S.news?'Rumor: '+S.news.text:'Quiet day. No news.'}</p>${S.news?'<p class="s">Rumors are usually right. Not always.</p>':''}</div>`}
+<div class="list">${ST.map(card).join('')}</div>
+${S.done?'':'<div class="dockw"><button class="next" data-a="next">Next day</button></div><p class="tip">Tip: '+TIPS[(S.day-1)%TIPS.length]+'</p>'}
+<footer><span>Best finish: ${S.best?money(S.best):'none yet'}<br>Seasons played: ${S.seasons}<br>${canSave?'Progress saves on this device.':'Saving is not available here.'}</span>
+<button data-a="reset">${armed?'Tap again to erase':'Reset progress'}</button></footer>`;
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-a]');if(!b||b.disabled)return;
+  const a=b.dataset.a,id=b.dataset.id;
+  if(a!=='reset'&&armed)armed=false;
+  if(a==='buy')buy(id);
+  else if(a==='sell')sell(id,false);
+  else if(a==='all')sell(id,true);
+  else if(a==='next')next();
+  else if(a==='new'){S=fresh(S);save();render()}
+  else if(a==='reset'){
+    if(armed){armed=false;S=fresh();save();render()}
+    else{armed=true;render();setTimeout(()=>{if(armed){armed=false;render()}},4000)}
+  }
+});
+S=load();save();render();
+</script>
+</body>
+</html>
