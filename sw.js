@@ -1,10 +1,15 @@
-/* sw.js — OMNILAUNCHER offline sync engine (build 7)
-   FAST SYNC: shell + all games download in PARALLEL; fonts are a
-   background phase that never blocks the "done" report; only
-   latin/latin-ext font subsets are kept. BOOT stays zero-network. */
-const CODE_VERSION='omnilauncher-sync-v2';
-const PACK='omnilauncher-pack';                 /* persists across sw versions */
+/* sw.js — OMNILAUNCHER offline sync engine (build 8)
+   • Sync held open with waitUntil — fonts can never be killed mid-download.
+   • Font links scanned for EVERY game in the library (cached ones too).
+   • AIRGAP mode: when on, every fetch is served from cache or fails —
+     the network is never touched, even while online. */
+const CODE_VERSION='omnilauncher-sync-v3';
+const PACK='omnilauncher-pack';
+const FLAGS='omnilauncher-flags';
 const ROOT=new URL('./',self.location.href).href;
+const AIRGAP_URL=ROOT+'__airgap__';
+
+let airgap=null;
 
 self.addEventListener('install',function(e){
   self.skipWaiting();
@@ -13,17 +18,45 @@ self.addEventListener('install',function(e){
 self.addEventListener('activate',function(e){
   e.waitUntil((async function(){
     const keys=await caches.keys();
-    await Promise.all(keys.filter(function(k){return k!==PACK}).map(function(k){return caches.delete(k)}));
+    await Promise.all(keys.filter(function(k){return k!==PACK&&k!==FLAGS}).map(function(k){return caches.delete(k)}));
     await self.clients.claim();
   })());
 });
+
+/* ---------- airgap flag (persists in the flags cache) ---------- */
+async function loadAirgap(){
+  if(airgap!==null)return airgap;
+  try{
+    const c=await caches.open(FLAGS);
+    airgap=!!(await c.match(AIRGAP_URL,{ignoreVary:true}));
+  }catch(e){airgap=false}
+  return airgap;
+}
+async function setAirgap(on){
+  try{
+    const c=await caches.open(FLAGS);
+    if(on)await c.put(AIRGAP_URL,new Response('on',{headers:{'Content-Type':'text/plain'}}));
+    else await c.delete(AIRGAP_URL);
+  }catch(e){}
+  airgap=!!on;
+  return airgap;
+}
 
 /* ---------- messages from the page ---------- */
 self.addEventListener('message',function(e){
   const d=e.data;
   if(!d||d.__sync!==true)return;
   if(d.type==='ping'){try{e.source.postMessage({__sync:true,type:'pong'})}catch(_){}return}
-  if(d.type==='start')runSync(d.games||[],e.source);
+  if(d.type==='airgap'){
+    e.waitUntil(setAirgap(!!d.on).then(function(state){
+      try{e.source.postMessage({__sync:true,type:'airgapped',on:state})}catch(_){}
+    }));
+    return;
+  }
+  if(d.type==='start'){
+    /* waitUntil keeps the worker alive for the WHOLE sync, fonts included */
+    e.waitUntil(runSync(d.games||[],e.source,d.all||[]));
+  }
 });
 
 function parseMeta(html){
@@ -57,13 +90,13 @@ function collectFontFiles(cssText,set){
       }
     }
   }
-  if(found===0){ /* no subset markers — keep everything */
+  if(found===0){
     const re=/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)/g;let m;
     while((m=re.exec(cssText))){set.add(m[1])}
   }
 }
 
-async function runSync(games,client){
+async function runSync(games,client,all){
   const send=function(m){try{if(client)client.postMessage(Object.assign({__sync:true},m))}catch(_){}}
   const broadcast=async function(m){
     try{
@@ -81,7 +114,7 @@ async function runSync(games,client){
     if(!res||!res.ok)throw new Error('HTTP '+(res&&res.status));
     return res;
   };
-  const storeOne=async function(url){ /* download + compare + cache; null on failure */
+  const storeOne=async function(url){ /* download + compare + cache; text or null */
     try{
       const res=await grab(url);
       const text=await res.clone().text();
@@ -96,9 +129,10 @@ async function runSync(games,client){
 
   /* ---- PHASE 1: shell + all games, fully parallel ---- */
   const shellTask=(async function(){
+    let text=null;
     try{
       const res=await grab(ROOT+'index.html');
-      const text=await res.clone().text();
+      text=await res.clone().text();
       let shChanged=true;
       const old=await cache.match(ROOT+'index.html',{ignoreVary:true})||await cache.match(ROOT,{ignoreVary:true});
       if(old){try{shChanged=(await old.clone().text())!==text}catch(_){}}
@@ -107,6 +141,7 @@ async function runSync(games,client){
       if(shChanged)changed=true;
     }catch(e){}
     done++;send({type:'progress',done:done,total:total});
+    return text;
   })();
 
   const gameTasks=games.map(function(g){
@@ -118,17 +153,30 @@ async function runSync(games,client){
         if(t)titles[g.url]=t;
       }
       done++;send({type:'progress',done:done,total:total});
+      return text;
     })();
   });
 
-  const texts=await Promise.all([shellTask].concat(gameTasks));
-  /* games & shell are synced — report immediately; fonts continue below */
+  const texts=(await Promise.all([shellTask].concat(gameTasks))).filter(function(t){return !!t});
+
+  /* games & shell synced — report immediately; fonts continue below */
   send({type:'done',changed:changed,failed:failed,titles:titles});
 
-  /* ---- PHASE 2 (background): fonts + manifest + icons ---- */
+  /* ---- PHASE 2 (protected by waitUntil): fonts + manifest + icons ---- */
   try{
     const fontCss=new Set();
-    for(const t of texts){if(t)collectFontCss(t,fontCss)}
+    for(const t of texts)collectFontCss(t,fontCss);
+
+    /* skipped games: read their HTML from the pack — local, zero network */
+    const dlSet={};
+    games.forEach(function(g){dlSet[g.url]=1});
+    for(const u of all){
+      if(dlSet[u])continue;
+      try{
+        const hit=await cache.match(u,{ignoreVary:true});
+        if(hit)collectFontCss(await hit.clone().text(),fontCss);
+      }catch(e){}
+    }
 
     const fontSet=new Set();
     await Promise.all(Array.from(fontCss).map(async function(cssUrl){
@@ -177,10 +225,12 @@ async function runSync(games,client){
       }
     }catch(e){}
   }catch(e){}
+  /* fonts finished — tell the page to re-verify & light the READY chip */
+  broadcast({type:'packdone'});
 }
 
-/* ---------- FETCH: boot path — pack cache first, no revalidation, ever.
-   Network only on a miss. no-store requests & the GitHub API pass through. ---------- */
+/* ---------- FETCH: cache-first, never revalidating.
+   AIRGAP: on a miss, refuse the network and behave as offline. ---------- */
 self.addEventListener('fetch',function(event){
   const req=event.request;
   if(req.method!=='GET')return;
@@ -193,6 +243,14 @@ self.addEventListener('fetch',function(event){
     const cache=await caches.open(PACK);
     const cached=await cache.match(req,{ignoreVary:true});
     if(cached)return cached;
+    if(await loadAirgap()){
+      const isPage=req.mode==='navigate'||(req.headers.get('accept')||'').indexOf('text/html')!==-1;
+      if(isPage){
+        const shell=await cache.match(ROOT+'index.html',{ignoreVary:true})||await cache.match(ROOT,{ignoreVary:true});
+        if(shell)return shell;
+      }
+      return new Response('AIRGAP — NETWORK BLOCKED',{status:503,headers:{'Content-Type':'text/plain'}});
+    }
     try{
       const fresh=await fetch(req);
       if(fresh&&(fresh.ok||fresh.type==='opaque')){

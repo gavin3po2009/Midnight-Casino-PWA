@@ -7,7 +7,6 @@
 <title>OMNILAUNCHER — Game Launcher</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<!-- non-blocking font load: page paints instantly, pixel font swaps in when ready -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;500;600;700&display=swap"></noscript>
 <style>
@@ -55,9 +54,14 @@ header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;
 h1{font:700 clamp(16px,3.2vw,24px)/1 var(--px);letter-spacing:2px;margin:0;text-shadow:0 0 14px rgba(109,242,198,.35)}
 .coin{margin-top:10px;font:8px var(--px);color:var(--faint);letter-spacing:1px;display:flex;gap:6px;align-items:center}
 .cursor{color:var(--neon);animation:blink 1.1s steps(1) infinite}
-.hstats{display:flex;gap:10px;align-items:center}
+.hstats{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .clock{font:10px var(--px);color:var(--amber);text-shadow:0 0 10px rgba(255,215,106,.3)}
 .chip{font:8px var(--px);color:var(--neon);border:1px solid var(--line2);padding:8px 11px;border-radius:4px;background:rgba(109,242,198,.05)}
+#readyChip{cursor:default}
+#readyChip::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;margin-right:8px;vertical-align:0}
+#readyChip.ok{color:var(--neon);border-color:rgba(109,242,198,.45)}
+#readyChip.bad{color:var(--amber);border-color:rgba(255,215,106,.4)}
+#readyChip.checking::before{animation:blink 1s steps(1) infinite}
 #installBtn{cursor:pointer;transition:.15s}
 #installBtn:hover{background:var(--neon);color:#06070d;border-color:var(--neon)}
 
@@ -71,6 +75,9 @@ h1{font:700 clamp(16px,3.2vw,24px)/1 var(--px);letter-spacing:2px;margin:0;text-
 .seg button:last-child{border-right:0}
 .seg button:hover{color:var(--dim)}
 .seg button.on{color:var(--bg);background:var(--neon)}
+.tbtn{height:42px;padding:0 14px;background:var(--panel);border:1px solid var(--line);color:var(--faint);border-radius:6px;font:8px var(--px);letter-spacing:1px;cursor:pointer;transition:.15s}
+.tbtn:hover{color:var(--dim);border-color:var(--line2)}
+.tbtn.on{color:var(--amber);border-color:var(--amber);background:rgba(255,215,106,.08);box-shadow:0 0 12px -2px rgba(255,215,106,.4)}
 .ibtn{height:42px;width:46px;background:var(--panel);border:1px solid var(--line);color:var(--dim);border-radius:6px;font-size:17px;cursor:pointer;transition:.15s}
 .ibtn:hover{color:var(--neon);border-color:var(--line2)}
 .ibtn.spin{animation:rot .9s linear infinite;color:var(--neon)}
@@ -142,7 +149,7 @@ footer b{color:var(--dim)}
   .clock{display:none}
 }
 @media (prefers-reduced-motion:reduce){
-  .scan::after,.cursor,.ibtn.glow{animation:none}
+  .scan::after,.cursor,.ibtn.glow,#readyChip.checking::before{animation:none}
 }
 </style>
 </head>
@@ -164,6 +171,7 @@ footer b{color:var(--dim)}
     </div>
     <div class="hstats">
       <div class="clock" id="clock">--:--</div>
+      <div class="chip" id="readyChip" hidden title="Verified locally: launcher + every game + every game font is in the offline pack">CHECKING</div>
       <button class="chip" id="installBtn" type="button" hidden>⤓ INSTALL</button>
       <div class="chip" id="gameCount">… GAMES</div>
     </div>
@@ -182,6 +190,7 @@ footer b{color:var(--dim)}
       <button data-sort="recent" type="button">RECENT</button>
       <button data-sort="top" type="button">TOP</button>
     </div>
+    <button class="tbtn" id="airgapBtn" type="button" title="Airgap — block ALL network use, even while online. Turn off to sync.">AIRGAP</button>
     <button class="ibtn" id="refreshBtn" type="button" title="Sync — refresh library & download the offline pack">⟳</button>
   </div>
 
@@ -194,7 +203,7 @@ footer b{color:var(--dim)}
 
   <footer>
     <div id="srcInfo">LIBRARY · —</div>
-    <div class="keys">CLICK A GAME TO PLAY FULLSCREEN · <b>ESC</b> RETURNS HERE · <b>⟳ SYNC</b> FOR UPDATES · <b>BUILD 7</b></div>
+    <div class="keys">CLICK A GAME TO PLAY FULLSCREEN · <b>ESC</b> RETURNS HERE · <b>⟳ SYNC</b> FOR UPDATES · <b>BUILD 8</b></div>
   </footer>
 </div>
 
@@ -232,6 +241,7 @@ const CONFIG={
   probeFolders:['','games/'],
   scanSubfolders:true
 };
+const PACK_NAME='omnilauncher-pack';
 
 /* ---------- shorthand / env ---------- */
 const $=id=>document.getElementById(id);
@@ -239,7 +249,7 @@ const grid=$('grid'), emptyEl=$('empty'), msgEl=$('msg'), searchEl=$('search'),
       countEl=$('gameCount'), srcEl=$('srcInfo'), refreshBtn=$('refreshBtn'),
       player=$('player'), stage=$('stage'), pTitle=$('pTitle'), pLoad=$('pLoad'),
       pFs=$('pFs'), pBack=$('pBack'), pClose=$('pClose'), clockEl=$('clock'),
-      installBtn=$('installBtn');
+      installBtn=$('installBtn'), readyChip=$('readyChip'), airgapBtn=$('airgapBtn');
 
 const IS_HTTP=location.protocol==='https:'||location.protocol==='http:';
 const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -247,7 +257,7 @@ function dec(s){try{return decodeURIComponent(s)}catch(e){return s}}
 function resolveUrl(rel){try{return new URL(rel,location.href).href}catch(e){return rel}}
 const LAUNCHER_FILE=(()=>{const p=location.pathname.split('/').filter(Boolean);const last=p.length?dec(p[p.length-1]):'';return/\.html?$/i.test(last)?last.toLowerCase():'index.html'})();
 
-/* ---------- PWA: register the worker IMMEDIATELY (not after load) ---------- */
+/* ---------- PWA: register the worker immediately ---------- */
 if('serviceWorker' in navigator && IS_HTTP){
   try{
     navigator.serviceWorker.register('sw.js').catch(function(e){
@@ -272,7 +282,8 @@ if(matchMedia('(display-mode: standalone)').matches)installBtn.hidden=true;
 /* ---------- state ---------- */
 let GAMES=[], REPO_LABEL='', sortMode='az', syncing=false;
 try{sortMode=localStorage.getItem('arcade.sort')||'az'}catch(e){sortMode='az'}
-const STATS_KEY='arcade.stats.v1', LIB_KEY='arcade.library.v6', LIB_KEY_OLD='arcade.library.v5', SYNC_KEY='arcade.sync.v1';
+const STATS_KEY='arcade.stats.v1', LIB_KEY='arcade.library.v6', LIB_KEY_OLD='arcade.library.v5',
+      SYNC_KEY='arcade.sync.v1', AIRGAP_KEY='arcade.airgap';
 let stats={};
 try{stats=JSON.parse(localStorage.getItem(STATS_KEY))||{}}catch(e){}
 function saveStats(){try{localStorage.setItem(STATS_KEY,JSON.stringify(stats))}catch(e){}}
@@ -314,6 +325,91 @@ function fmtSize(n){return n>1048576?(n/1048576).toFixed(1)+' MB':(n/1024).toFix
 function setMsg(text,kind){
   if(!text){msgEl.hidden=true;msgEl.textContent='';msgEl.className='msg';return}
   msgEl.textContent=text;msgEl.className='msg '+(kind||'');msgEl.hidden=false;
+}
+
+/* ---------- AIRGAP ---------- */
+function airgapOn(){try{return localStorage.getItem(AIRGAP_KEY)==='1'}catch(e){return false}}
+function pushAirgap(){
+  if(!IS_HTTP||!('serviceWorker' in navigator))return;
+  navigator.serviceWorker.ready.then(function(reg){
+    const sw=reg.active||navigator.serviceWorker.controller;
+    if(sw){try{sw.postMessage({__sync:true,type:'airgap',on:airgapOn()})}catch(e){}}
+  }).catch(function(){});
+}
+function setAirgapState(on){
+  try{localStorage.setItem(AIRGAP_KEY,on?'1':'0')}catch(e){}
+  airgapBtn.classList.toggle('on',on);
+  pushAirgap();
+  if(on)setMsg('AIRGAP ON — ALL NETWORK BLOCKED','warn');
+  else setMsg('AIRGAP OFF');
+  setTimeout(function(){if(msgEl.textContent.indexOf('AIRGAP')!==-1)setMsg('')},2500);
+  updateSyncUI();
+}
+airgapBtn.addEventListener('click',function(){setAirgapState(!airgapOn())});
+
+/* ---------- OFFLINE READY — local pack verification (zero network) ---------- */
+function pageCollectFontCss(text,set){
+  const re=/https:\/\/fonts\.googleapis\.com\/css[^"'\s)]+/g;let m;
+  while((m=re.exec(text)))set.add(m[0].replace(/&amp;/g,'&'));
+}
+function pageCollectFontFiles(cssText,set){
+  if(!cssText)return;
+  let found=0;
+  const blocks=cssText.split('/*');
+  if(blocks.length>1){
+    for(let i=1;i<blocks.length;i++){
+      const b=blocks[i];
+      const end=b.indexOf('*/');
+      const label=(end>=0?b.slice(0,end):'').toLowerCase();
+      if(label.indexOf('latin')!==-1){
+        const re=/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)/g;let m;
+        while((m=re.exec(b))){const sz=set.size;set.add(m[1]);if(set.size>sz)found++}
+      }
+    }
+  }
+  if(found===0){
+    const re=/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)/g;let m;
+    while((m=re.exec(cssText))){set.add(m[1])}
+  }
+}
+function setReadyChip(state){
+  if(!IS_HTTP||!GAMES.length){readyChip.hidden=true;return}
+  readyChip.hidden=false;
+  readyChip.className='chip '+(state==='ready'?'ok':state==='checking'?'checking':'bad');
+  readyChip.textContent=state==='ready'?'OFFLINE READY':(state==='checking'?'CHECKING':(state==='syncing'?'SYNCING':'PACK INCOMPLETE'));
+}
+async function verifyPack(){
+  if(!IS_HTTP||!GAMES.length||!('caches' in window)){setReadyChip('checking');readyChip.hidden=true;return}
+  setReadyChip('checking');
+  try{
+    const pack=await caches.open(PACK_NAME);
+    const root=new URL('./',location.href).href;
+    let missing=0;
+    if(!(await pack.match(root,{ignoreVary:true}))&&!(await pack.match(root+'index.html',{ignoreVary:true})))missing++;
+    const cssUrls=new Set();
+    for(const g of GAMES){
+      const hit=await pack.match(g.url,{ignoreVary:true});
+      if(!hit){missing++;continue}
+      let text='';
+      try{text=await hit.clone().text()}catch(e){}
+      pageCollectFontCss(text,cssUrls);
+    }
+    const fontFiles=new Set();
+    for(const cssUrl of cssUrls){
+      const hit=await pack.match(cssUrl,{ignoreVary:true});
+      if(!hit){missing++;continue}
+      let text='';
+      try{text=await hit.clone().text()}catch(e){}
+      pageCollectFontFiles(text,fontFiles);
+    }
+    for(const fu of fontFiles){
+      if(!(await pack.match(fu,{ignoreVary:true})))missing++;
+    }
+    setReadyChip(missing===0?'ready':'incomplete');
+    try{console.info('[OMNILAUNCHER] pack check: '+(missing===0?'complete':missing+' item(s) missing'))}catch(e){}
+  }catch(e){
+    setReadyChip('incomplete');
+  }
 }
 
 /* ---------- repo detection ---------- */
@@ -456,7 +552,7 @@ async function probeLive(){
   return out;
 }
 
-/* ---------- gather: ALL network lookups run in parallel ---------- */
+/* ---------- gather: all network lookups in parallel ---------- */
 async function gather(){
   const manual=CONFIG.games.map(normalizeEntry).filter(Boolean);
   const info=detectRepo();
@@ -498,7 +594,7 @@ function pingWorker(sw){
     try{sw.postMessage({__sync:true,type:'ping'})}catch(e){clearTimeout(to);navigator.serviceWorker.removeEventListener('message',on);res(false)}
   });
 }
-async function getSyncWorker(){ /* fast handshake: 4s budget, ~0ms when current */
+async function getSyncWorker(){
   if(!('serviceWorker' in navigator))return null;
   const deadline=Date.now()+4000;
   while(Date.now()<deadline){
@@ -513,7 +609,7 @@ async function getSyncWorker(){ /* fast handshake: 4s budget, ~0ms when current 
   }
   return null;
 }
-function swSync(items){
+function swSync(items,allUrls){
   return new Promise(function(resolve,reject){
     let timer=0;
     function cleanup(){clearTimeout(timer);navigator.serviceWorker.removeEventListener('message',onMsg)}
@@ -527,36 +623,39 @@ function swSync(items){
     timer=setTimeout(function(){cleanup();reject({timeout:true})},180000);
     getSyncWorker().then(function(sw){
       if(!sw){cleanup();reject({noWorker:true});return}
-      sw.postMessage({__sync:true,type:'start',games:items});
+      sw.postMessage({__sync:true,type:'start',games:items,all:allUrls||[]});
     }).catch(function(){cleanup();reject({error:true})});
   });
 }
 
 async function syncNow(auto){
   if(!IS_HTTP){setMsg('SYNC NEEDS THE SITE HOSTED OVER HTTP','warn');return}
+  if(airgapOn()){setMsg('AIRGAP IS ON — TURN IT OFF TO SYNC','warn');return}
   if(syncing)return;
   if(navigator.onLine===false){setMsg('OFFLINE — CAN\'T SYNC','warn');return}
   syncing=true;
   refreshBtn.classList.add('spin');
   refreshBtn.classList.remove('glow');
+  setReadyChip('syncing');
   setMsg(auto?'FIRST SYNC':'SYNCING','load');
   let note='',kind='';
   try{
     const res=await gather();
     if(res.info)REPO_LABEL=res.info.owner+'/'+res.info.repo;
-    try{console.info('[OMNILAUNCHER b7] sync | repo:',res.info?REPO_LABEL:'none',
+    try{console.info('[OMNILAUNCHER b8] sync | repo:',res.info?REPO_LABEL:'none',
       '| api:',res.apiErr?(res.apiErr.rateLimited?'rate-limited':res.apiErr.notFound?'not-listable':res.apiErr.noRepo?'no-repo':'error'):'ok',
       '| probe hits:',res.probed,'| library:',res.list.length)}catch(e){}
     let list=res.list;
     if(list.length>0){
       const rec=loadSyncRec();
+      const allUrls=list.map(function(g){return g.url});
       const dl=list.filter(function(g){
         if(g.titleLocked)return true;
         const known=rec.sizes[g.url];
         return !(g.size&&known===g.size);
       }).map(function(g){return{url:g.url}});
 
-      const result=await swSync(dl);
+      const result=await swSync(dl,allUrls);
 
       if(result.failed&&result.failed.length){
         const bad={};
@@ -592,27 +691,34 @@ async function syncNow(auto){
     }
   }catch(e){
     note='SYNC FAILED — CHECK CONNECTION';kind='warn';
-    try{console.warn('[OMNILAUNCHER b7] sync error',e)}catch(_){}
+    try{console.warn('[OMNILAUNCHER b8] sync error',e)}catch(_){}
   }
   syncing=false;
   refreshBtn.classList.remove('spin');
   renderAll();
   setMsg(note,kind);
   if(!kind)setTimeout(function(){if(!syncing)setMsg('')},5000);
+  verifyPack();
 }
 
-/* background font progress from the worker (arrives after 'done') */
+/* persistent worker messages: font progress, pack complete, airgap confirm */
 if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('message',function(ev){
     const d=ev.data;
-    if(!d||d.__sync!==true||d.type!=='fonts')return;
-    if(msgEl.hidden&&player.hidden&&GAMES.length){
-      setMsg('SYNCING FONTS '+d.done+' / '+d.total,'load');
-    }
-    if(d.done>=d.total){
-      setTimeout(function(){
-        if(msgEl.textContent.indexOf('FONTS')!==-1)setMsg('');
-      },1200);
+    if(!d||d.__sync!==true)return;
+    if(d.type==='fonts'){
+      if(msgEl.hidden&&player.hidden&&GAMES.length){
+        setMsg('SYNCING FONTS '+d.done+' / '+d.total,'load');
+      }
+      if(d.done>=d.total){
+        setTimeout(function(){
+          if(msgEl.textContent.indexOf('FONTS')!==-1)setMsg('');
+        },1200);
+      }
+    }else if(d.type==='packdone'){
+      verifyPack();
+    }else if(d.type==='airgapped'){
+      airgapBtn.classList.toggle('on',!!d.on);
     }
   });
 }
@@ -620,9 +726,9 @@ if('serviceWorker' in navigator){
 function updateSyncUI(){
   const rec=loadSyncRec();
   const stale=!rec.last||Date.now()-rec.last>86400e3;
-  refreshBtn.classList.toggle('glow',IS_HTTP&&navigator.onLine!==false&&stale&&!syncing);
+  refreshBtn.classList.toggle('glow',IS_HTTP&&!airgapOn()&&navigator.onLine!==false&&stale&&!syncing);
   const when=rec.last?('SYNCED '+relTime(rec.last).toLowerCase()):'NEVER SYNCED';
-  srcEl.textContent='LIBRARY · '+(REPO_LABEL||'manual')+(GAMES.length?' · '+GAMES.length+' TITLES':'')+' · '+when;
+  srcEl.textContent='LIBRARY · '+(REPO_LABEL||'manual')+(GAMES.length?' · '+GAMES.length+' TITLES':'')+' · '+when+(airgapOn()?' · AIRGAP ON':'');
 }
 addEventListener('online',function(){setMsg('');updateSyncUI()});
 addEventListener('offline',function(){
@@ -649,8 +755,13 @@ function boot(){
     GAMES=[];
   }
   renderAll();
+  airgapBtn.classList.toggle('on',airgapOn());
+  pushAirgap();
+  verifyPack();
   if(!rec.last){
-    if(navigator.onLine!==false){
+    if(airgapOn()){
+      setMsg('AIRGAP IS ON — TURN IT OFF AND SYNC ONCE','warn');
+    }else if(navigator.onLine!==false){
       syncNow(true);
     }else{
       setMsg('OFFLINE — CONNECT ONCE AND PRESS ⟳ SYNC','warn');
@@ -901,7 +1012,7 @@ function buildEmpty(q){
   const ol=document.createElement('ol');
   const items=[
     'Commit your game <code>.html</code> files next to <code>index.html</code> in the repo (a <code>games/</code> subfolder works too).',
-    'Get online for a moment and press <b>⟳ SYNC</b> — every game downloads once (a few seconds), then the launcher works fully offline.',
+    'Get online for a moment and press <b>⟳ SYNC</b> — every game and its fonts download once, then the launcher works fully offline.',
     'After that first sync, zero internet is used until you choose to sync again.'
   ];
   items.forEach(t=>{const li=document.createElement('li');li.innerHTML=t;ol.appendChild(li)});
@@ -1147,7 +1258,7 @@ if(document.fonts&&document.fonts.load){
  $('brandTitle').textContent=CONFIG.title;
 document.title=CONFIG.title+' — Game Launcher';
 if(!fsSupported())pFs.style.display='none';
-try{console.info('[OMNILAUNCHER] build 7 · parallel fast sync')}catch(e){}
+try{console.info('[OMNILAUNCHER] build 8 · pack verification + airgap')}catch(e){}
 boot();
 })();
 </script>
