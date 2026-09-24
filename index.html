@@ -7,9 +7,9 @@
 <title>OMNILAUNCHER — Game Launcher</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- non-blocking font load: page paints instantly, pixel font swaps in when ready -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;500;600;700&display=swap"></noscript>
 <style>
 :root{
   --bg:#06070d; --panel:#0d111f; --panel2:#12172a;
@@ -194,7 +194,7 @@ footer b{color:var(--dim)}
 
   <footer>
     <div id="srcInfo">LIBRARY · —</div>
-    <div class="keys">CLICK A GAME TO PLAY FULLSCREEN · <b>ESC</b> RETURNS HERE · <b>⟳ SYNC</b> FOR UPDATES · <b>BUILD 6</b></div>
+    <div class="keys">CLICK A GAME TO PLAY FULLSCREEN · <b>ESC</b> RETURNS HERE · <b>⟳ SYNC</b> FOR UPDATES · <b>BUILD 7</b></div>
   </footer>
 </div>
 
@@ -247,13 +247,13 @@ function dec(s){try{return decodeURIComponent(s)}catch(e){return s}}
 function resolveUrl(rel){try{return new URL(rel,location.href).href}catch(e){return rel}}
 const LAUNCHER_FILE=(()=>{const p=location.pathname.split('/').filter(Boolean);const last=p.length?dec(p[p.length-1]):'';return/\.html?$/i.test(last)?last.toLowerCase():'index.html'})();
 
-/* ---------- PWA: register the service worker ---------- */
+/* ---------- PWA: register the worker IMMEDIATELY (not after load) ---------- */
 if('serviceWorker' in navigator && IS_HTTP){
-  addEventListener('load',function(){
+  try{
     navigator.serviceWorker.register('sw.js').catch(function(e){
       try{console.warn('[OMNILAUNCHER] SW registration failed',e)}catch(_){}
     });
-  });
+  }catch(e){}
 }
 let installPrompt=null;
 window.addEventListener('beforeinstallprompt',function(e){
@@ -279,7 +279,7 @@ function saveStats(){try{localStorage.setItem(STATS_KEY,JSON.stringify(stats))}c
 function bumpStats(g){const s=stats[g.url]||{n:0,t:0};s.n++;s.t=Date.now();stats[g.url]=s;saveStats()}
 function mostRecentUrl(){let best=null,bt=0;for(const k in stats){if(stats[k].t>bt){bt=stats[k].t;best=k}}return best}
 
-/* ---------- library + sync records (localStorage = offline library) ---------- */
+/* ---------- library + sync records ---------- */
 function packGame(g){return{u:g.url,f:g.file,ti:g.title,de:g.desc,s:g.size}}
 function unpackGame(o){return{url:o.u,file:o.f||'game',title:o.ti||prettify(o.f||'game'),desc:o.de,size:o.s,source:'cache'}}
 function loadLibrary(){
@@ -427,7 +427,7 @@ async function loadGamesJson(){
   return[];
 }
 
-/* ---------- direct file probe (sync-time fallback) ---------- */
+/* ---------- direct file probe ---------- */
 async function probeLive(){
   if(!IS_HTTP)return[];
   const found=[],seen=new Set();
@@ -456,21 +456,26 @@ async function probeLive(){
   return out;
 }
 
-/* ---------- gather fresh library (sync-time only — never at boot) ---------- */
+/* ---------- gather: ALL network lookups run in parallel ---------- */
 async function gather(){
   const manual=CONFIG.games.map(normalizeEntry).filter(Boolean);
-  const json=await loadGamesJson();
   const info=detectRepo();
-  let apiGames=[],apiErr=null;
-  if(info){try{apiGames=await listRepoGames(info)}catch(e){apiErr=e}}
-  else apiErr={noRepo:true};
-  const probeGames=await probeLive();
+  const jsonTask=loadGamesJson();
+  const apiTask=(async function(){
+    if(!info)return{games:[],err:{noRepo:true}};
+    try{return{games:await listRepoGames(info),err:null}}
+    catch(e){return{games:[],err:e}}
+  })();
+  const probeTask=probeLive();
+  const json=await jsonTask;
+  const api=await apiTask;
+  const probeGames=await probeTask;
   const map=new Map();
-  for(const g of apiGames)map.set(g.url,Object.assign({},g));
+  for(const g of api.games)map.set(g.url,Object.assign({},g));
   for(const g of probeGames)if(!map.has(g.url))map.set(g.url,Object.assign({},g));
   for(const g of json)map.set(g.url,Object.assign({},map.get(g.url)||{},g));
   for(const g of manual)map.set(g.url,Object.assign({},map.get(g.url)||{},g));
-  return{list:Array.from(map.values()),apiErr:apiErr,info:info,probed:probeGames.length};
+  return{list:Array.from(map.values()),apiErr:api.err,info:info,probed:probeGames.length};
 }
 function emptyReason(apiErr){
   if(apiErr&&apiErr.rateLimited)return 'GITHUB API RATE-LIMITED — TRY AGAIN IN A BIT';
@@ -480,28 +485,31 @@ function emptyReason(apiErr){
 }
 
 /* =====================================================================
-   SYNC — the only thing that ever touches the network
+   SYNC
    ===================================================================== */
 function pingWorker(sw){
   return new Promise(function(res){
-    const to=setTimeout(function(){navigator.serviceWorker.removeEventListener('message',on);res(false)},600);
+    const to=setTimeout(function(){navigator.serviceWorker.removeEventListener('message',on);res(false)},450);
     function on(ev){
       const d=ev.data;
-      if(d&&d.__sync===true&&d.type==='pong'){
-        clearTimeout(to);navigator.serviceWorker.removeEventListener('message',on);res(true);
-      }
+      if(d&&d.__sync===true&&d.type==='pong'){clearTimeout(to);navigator.serviceWorker.removeEventListener('message',on);res(true)}
     }
     navigator.serviceWorker.addEventListener('message',on);
     try{sw.postMessage({__sync:true,type:'ping'})}catch(e){clearTimeout(to);navigator.serviceWorker.removeEventListener('message',on);res(false)}
   });
 }
-async function getSyncWorker(){
+async function getSyncWorker(){ /* fast handshake: 4s budget, ~0ms when current */
   if(!('serviceWorker' in navigator))return null;
-  for(let i=0;i<12;i++){
+  const deadline=Date.now()+4000;
+  while(Date.now()<deadline){
     let sw=navigator.serviceWorker.controller;
-    if(!sw){try{const reg=await navigator.serviceWorker.ready;sw=reg.active}catch(e){}}
     if(sw&&await pingWorker(sw))return sw;
-    await new Promise(function(r){setTimeout(r,500)});
+    try{
+      const reg=await navigator.serviceWorker.ready;
+      sw=reg.active;
+      if(sw&&await pingWorker(sw))return sw;
+    }catch(e){}
+    await new Promise(function(r){setTimeout(r,200)});
   }
   return null;
 }
@@ -536,12 +544,11 @@ async function syncNow(auto){
   try{
     const res=await gather();
     if(res.info)REPO_LABEL=res.info.owner+'/'+res.info.repo;
-    try{console.info('[OMNILAUNCHER b6] sync | repo:',res.info?REPO_LABEL:'none',
+    try{console.info('[OMNILAUNCHER b7] sync | repo:',res.info?REPO_LABEL:'none',
       '| api:',res.apiErr?(res.apiErr.rateLimited?'rate-limited':res.apiErr.notFound?'not-listable':res.apiErr.noRepo?'no-repo':'error'):'ok',
       '| probe hits:',res.probed,'| library:',res.list.length)}catch(e){}
     let list=res.list;
     if(list.length>0){
-      /* only (re)download games that are new or whose size changed */
       const rec=loadSyncRec();
       const dl=list.filter(function(g){
         if(g.titleLocked)return true;
@@ -575,7 +582,7 @@ async function syncNow(auto){
       saveSyncRec({last:Date.now(),sizes:sizes});
       if(result.changed){
         setMsg('SYNCED — APPLYING UPDATE…','load');
-        setTimeout(function(){location.reload()},1400);
+        setTimeout(function(){location.reload()},1200);
         return;
       }
       note='EVERYTHING UP TO DATE — '+GAMES.length+' GAMES READY OFFLINE';
@@ -585,13 +592,29 @@ async function syncNow(auto){
     }
   }catch(e){
     note='SYNC FAILED — CHECK CONNECTION';kind='warn';
-    try{console.warn('[OMNILAUNCHER b6] sync error',e)}catch(_){}
+    try{console.warn('[OMNILAUNCHER b7] sync error',e)}catch(_){}
   }
   syncing=false;
   refreshBtn.classList.remove('spin');
   renderAll();
   setMsg(note,kind);
   if(!kind)setTimeout(function(){if(!syncing)setMsg('')},5000);
+}
+
+/* background font progress from the worker (arrives after 'done') */
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.addEventListener('message',function(ev){
+    const d=ev.data;
+    if(!d||d.__sync!==true||d.type!=='fonts')return;
+    if(msgEl.hidden&&player.hidden&&GAMES.length){
+      setMsg('SYNCING FONTS '+d.done+' / '+d.total,'load');
+    }
+    if(d.done>=d.total){
+      setTimeout(function(){
+        if(msgEl.textContent.indexOf('FONTS')!==-1)setMsg('');
+      },1200);
+    }
+  });
 }
 
 function updateSyncUI(){
@@ -628,7 +651,7 @@ function boot(){
   renderAll();
   if(!rec.last){
     if(navigator.onLine!==false){
-      syncNow(true); /* first run (or migration) — the one-time burst */
+      syncNow(true);
     }else{
       setMsg('OFFLINE — CONNECT ONCE AND PRESS ⟳ SYNC','warn');
     }
@@ -1124,7 +1147,7 @@ if(document.fonts&&document.fonts.load){
  $('brandTitle').textContent=CONFIG.title;
 document.title=CONFIG.title+' — Game Launcher';
 if(!fsSupported())pFs.style.display='none';
-try{console.info('[OMNILAUNCHER] build 6 · zero-network boot · sync on demand')}catch(e){}
+try{console.info('[OMNILAUNCHER] build 7 · parallel fast sync')}catch(e){}
 boot();
 })();
 </script>
