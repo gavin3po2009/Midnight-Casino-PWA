@@ -1,13 +1,15 @@
-/* sw.js — OMNILAUNCHER offline sync engine (build 8)
-   • Sync held open with waitUntil — fonts can never be killed mid-download.
-   • Font links scanned for EVERY game in the library (cached ones too).
-   • AIRGAP mode: when on, every fetch is served from cache or fails —
-     the network is never touched, even while online. */
-const CODE_VERSION='omnilauncher-sync-v3';
+/* sw.js — OMNILAUNCHER offline sync engine (build 9)
+   • A: preconnect/dns-prefetch hints stripped from every cached page.
+   • D: Google Fonts fully localized — cached HTML & CSS rewritten to
+     /__gf__/... pack paths; woff2 stored under local keys. No Google
+     URL, request, or socket after the first sync.
+   • Sync held open with waitUntil; AIRGAP blocks all network on miss. */
+const CODE_VERSION='omnilauncher-sync-v4';
 const PACK='omnilauncher-pack';
 const FLAGS='omnilauncher-flags';
 const ROOT=new URL('./',self.location.href).href;
 const AIRGAP_URL=ROOT+'__airgap__';
+const GF='https://fonts.googleapis.com/css2?';
 
 let airgap=null;
 
@@ -19,11 +21,20 @@ self.addEventListener('activate',function(e){
   e.waitUntil((async function(){
     const keys=await caches.keys();
     await Promise.all(keys.filter(function(k){return k!==PACK&&k!==FLAGS}).map(function(k){return caches.delete(k)}));
+    /* purge old-format (Google-URL) font entries from earlier builds */
+    try{
+      const pack=await caches.open(PACK);
+      const entries=await pack.keys();
+      await Promise.all(entries.filter(function(r){
+        const u=String(r.url);
+        return u.indexOf('https://fonts.googleapis.com')===0||u.indexOf('https://fonts.gstatic.com')===0;
+      }).map(function(r){return pack.delete(r)}));
+    }catch(e2){}
     await self.clients.claim();
   })());
 });
 
-/* ---------- airgap flag (persists in the flags cache) ---------- */
+/* ---------- airgap flag ---------- */
 async function loadAirgap(){
   if(airgap!==null)return airgap;
   try{
@@ -42,7 +53,7 @@ async function setAirgap(on){
   return airgap;
 }
 
-/* ---------- messages from the page ---------- */
+/* ---------- messages ---------- */
 self.addEventListener('message',function(e){
   const d=e.data;
   if(!d||d.__sync!==true)return;
@@ -54,10 +65,66 @@ self.addEventListener('message',function(e){
     return;
   }
   if(d.type==='start'){
-    /* waitUntil keeps the worker alive for the WHOLE sync, fonts included */
     e.waitUntil(runSync(d.games||[],e.source,d.all||[]));
   }
 });
+
+/* ---------- local font paths (D) ---------- */
+function cssLocalKey(query){return ROOT+'__gf__/css2?'+query}
+function cssGoogleUrl(query){return GF+query}
+function wLocalKey(gurl){return ROOT+'__gf__/w/'+encodeURIComponent(gurl)}
+
+/* A + D: strip preconnect hints, point font CSS at local pack paths */
+function sanitizeHtml(text){
+  if(!text)return text;
+  let t=text;
+  t=t.replace(/<link[^>]*rel=["'][^"']*(?:preconnect|dns-prefetch)[^"']*["'][^>]*>/gi,'');
+  t=t.split('https://fonts.googleapis.com/css2?').join('/__gf__/css2?');
+  return t;
+}
+/* D: point font files inside CSS at local pack paths */
+function sanitizeCss(text){
+  if(!text)return text;
+  return text.replace(/url\((https:\/\/fonts\.gstatic\.com\/[^)\s]+)\)/g,function(m,u){
+    return 'url(/__gf__/w/'+encodeURIComponent(u)+')';
+  });
+}
+/* collect css2 queries from HTML (handles both Google and local form) */
+function collectCssQueries(text,set){
+  const re=/((?:https:\/\/fonts\.googleapis\.com|\/__gf__)\/css2\?[^"'\s)]+)/g;let m;
+  while((m=re.exec(text))){
+    const s=m[1];
+    set.add(s.slice(s.indexOf('css2?')+5).replace(/&amp;/g,'&'));
+  }
+}
+/* collect font-file URLs from CSS (both forms; latin/latin-ext subsets) */
+function fontUrlsIn(cssText){
+  const out=[];
+  if(!cssText)return out;
+  const re=/url\((https:\/\/fonts\.gstatic\.com\/[^)\s]+)\)|url\(\/__gf__\/w\/([^)\s]+)\)/g;let m;
+  while((m=re.exec(cssText))){
+    if(m[1])out.push(m[1]);
+    else if(m[2]){try{out.push(decodeURIComponent(m[2]))}catch(e){}}
+  }
+  return out;
+}
+function collectFontFiles(cssText,set){
+  if(!cssText)return;
+  let found=0;
+  const scan=function(seg){
+    for(const u of fontUrlsIn(seg)){const sz=set.size;set.add(u);if(set.size>sz)found++}
+  };
+  const blocks=cssText.split('/*');
+  if(blocks.length>1){
+    for(let i=1;i<blocks.length;i++){
+      const b=blocks[i];
+      const end=b.indexOf('*/');
+      const label=(end>=0?b.slice(0,end):'').toLowerCase();
+      if(label.indexOf('latin')!==-1)scan(b);
+    }
+  }
+  if(found===0)scan(cssText);
+}
 
 function parseMeta(html){
   const out={};
@@ -69,31 +136,6 @@ function parseMeta(html){
     if(c)out.d=c[1].trim().slice(0,150);
   }
   return (out.t||out.d)?out:null;
-}
-function collectFontCss(text,set){
-  const re=/https:\/\/fonts\.googleapis\.com\/css[^"'\s)]+/g;let m;
-  while((m=re.exec(text)))set.add(m[0].replace(/&amp;/g,'&'));
-}
-/* keep only latin / latin-ext subsets — the ones a page actually renders */
-function collectFontFiles(cssText,set){
-  if(!cssText)return;
-  let found=0;
-  const blocks=cssText.split('/*');
-  if(blocks.length>1){
-    for(let i=1;i<blocks.length;i++){
-      const b=blocks[i];
-      const end=b.indexOf('*/');
-      const label=(end>=0?b.slice(0,end):'').toLowerCase();
-      if(label.indexOf('latin')!==-1){
-        const re=/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)/g;let m;
-        while((m=re.exec(b))){const sz=set.size;set.add(m[1]);if(set.size>sz)found++}
-      }
-    }
-  }
-  if(found===0){
-    const re=/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)/g;let m;
-    while((m=re.exec(cssText))){set.add(m[1])}
-  }
 }
 
 async function runSync(games,client,all){
@@ -108,36 +150,39 @@ async function runSync(games,client,all){
   const failed=[],titles={};
   let changed=false,done=0;
   const total=games.length+1;
+  const htmlHeaders={'Content-Type':'text/html; charset=utf-8'};
 
   const grab=async function(url){
     const res=await fetch(new Request(url,{cache:'reload'}));
     if(!res||!res.ok)throw new Error('HTTP '+(res&&res.status));
     return res;
   };
-  const storeOne=async function(url){ /* download + compare + cache; text or null */
+  const storeOne=async function(url){ /* fetch → sanitize → compare → store */
     try{
       const res=await grab(url);
-      const text=await res.clone().text();
+      const raw=await res.clone().text();
+      const text=sanitizeHtml(raw);
       let fileChanged=true;
       const old=await cache.match(url,{ignoreVary:true});
       if(old){try{fileChanged=(await old.clone().text())!==text}catch(_){fileChanged=true}}
-      await cache.put(url,res);
+      await cache.put(url,new Response(text,{headers:htmlHeaders}));
       if(fileChanged)changed=true;
       return text;
     }catch(e){return null}
   };
 
-  /* ---- PHASE 1: shell + all games, fully parallel ---- */
+  /* ---- PHASE 1: shell + all games, parallel ---- */
   const shellTask=(async function(){
     let text=null;
     try{
       const res=await grab(ROOT+'index.html');
-      text=await res.clone().text();
+      const raw=await res.clone().text();
+      text=sanitizeHtml(raw);
       let shChanged=true;
       const old=await cache.match(ROOT+'index.html',{ignoreVary:true})||await cache.match(ROOT,{ignoreVary:true});
       if(old){try{shChanged=(await old.clone().text())!==text}catch(_){}}
-      await cache.put(ROOT,res.clone());
-      await cache.put(ROOT+'index.html',res);
+      await cache.put(ROOT,new Response(text,{headers:htmlHeaders}));
+      await cache.put(ROOT+'index.html',new Response(text,{headers:htmlHeaders}));
       if(shChanged)changed=true;
     }catch(e){}
     done++;send({type:'progress',done:done,total:total});
@@ -159,51 +204,62 @@ async function runSync(games,client,all){
 
   const texts=(await Promise.all([shellTask].concat(gameTasks))).filter(function(t){return !!t});
 
-  /* games & shell synced — report immediately; fonts continue below */
   send({type:'done',changed:changed,failed:failed,titles:titles});
 
-  /* ---- PHASE 2 (protected by waitUntil): fonts + manifest + icons ---- */
+  /* ---- PHASE 2 (waitUntil-protected): local fonts + migration ---- */
   try{
-    const fontCss=new Set();
-    for(const t of texts)collectFontCss(t,fontCss);
+    const queries=new Set();
+    for(const t of texts)collectCssQueries(t,queries);
 
-    /* skipped games: read their HTML from the pack — local, zero network */
+    /* skipped games: migrate their cached HTML locally — zero network */
     const dlSet={};
     games.forEach(function(g){dlSet[g.url]=1});
     for(const u of all){
       if(dlSet[u])continue;
       try{
         const hit=await cache.match(u,{ignoreVary:true});
-        if(hit)collectFontCss(await hit.clone().text(),fontCss);
+        if(!hit)continue;
+        const raw=await hit.clone().text();
+        if(raw.indexOf('fonts.googleapis.com/css2?')!==-1||/(preconnect|dns-prefetch)/i.test(raw)){
+          await cache.put(u,new Response(sanitizeHtml(raw),{headers:htmlHeaders}));
+        }
+        collectCssQueries(raw,queries);
       }catch(e){}
     }
 
-    const fontSet=new Set();
-    await Promise.all(Array.from(fontCss).map(async function(cssUrl){
+    /* CSS: fetch once from Google, store rewritten under local keys */
+    const wurls=new Set();
+    await Promise.all(Array.from(queries).map(async function(q){
+      const lk=cssLocalKey(q);
       let text='';
-      const hit=await cache.match(cssUrl,{ignoreVary:true});
+      const hit=await cache.match(lk,{ignoreVary:true});
       if(hit){try{text=await hit.clone().text()}catch(_){}}
       else{
         try{
-          const res=await fetch(new Request(cssUrl,{cache:'reload',mode:'cors'}));
-          if(res&&res.ok){text=await res.clone().text();await cache.put(cssUrl,res)}
+          const res=await fetch(new Request(cssGoogleUrl(q),{cache:'reload',mode:'cors'}));
+          if(res&&res.ok){
+            const orig=await res.clone().text();
+            await cache.put(lk,new Response(sanitizeCss(orig),{headers:{'Content-Type':'text/css'}}));
+            text=orig; /* collect file urls from the original form */
+          }
         }catch(e){}
       }
-      if(text)collectFontFiles(text,fontSet);
+      if(text)collectFontFiles(text,wurls);
     }));
 
     const needed=[];
-    await Promise.all(Array.from(fontSet).map(async function(u){
-      if(!(await cache.match(u,{ignoreVary:true})))needed.push(u);
+    await Promise.all(Array.from(wurls).map(async function(u){
+      const lk=wLocalKey(u);
+      if(!(await cache.match(lk,{ignoreVary:true})))needed.push({u:u,lk:lk});
     }));
 
     if(needed.length){
       let fDone=0;
       broadcast({type:'fonts',done:0,total:needed.length});
-      await Promise.all(needed.map(async function(u){
+      await Promise.all(needed.map(async function(item){
         try{
-          const r=await fetch(new Request(u,{cache:'reload',mode:'cors'}));
-          if(r&&r.ok)await cache.put(u,r);
+          const r=await fetch(new Request(item.u,{cache:'reload',mode:'cors'}));
+          if(r&&r.ok)await cache.put(item.lk,r);
         }catch(e){}
         fDone++;
         broadcast({type:'fonts',done:fDone,total:needed.length});
@@ -225,24 +281,46 @@ async function runSync(games,client,all){
       }
     }catch(e){}
   }catch(e){}
-  /* fonts finished — tell the page to re-verify & light the READY chip */
   broadcast({type:'packdone'});
 }
 
 /* ---------- FETCH: cache-first, never revalidating.
-   AIRGAP: on a miss, refuse the network and behave as offline. ---------- */
+   Google font requests are mapped to their local pack keys.
+   AIRGAP refuses the network on any miss. ---------- */
 self.addEventListener('fetch',function(event){
   const req=event.request;
   if(req.method!=='GET')return;
   if(req.cache==='no-store')return;
   const url=new URL(req.url);
-  const isFont=url.hostname==='fonts.googleapis.com'||url.hostname==='fonts.gstatic.com';
-  if(url.origin!==self.location.origin&&!isFont)return;
+  const sameOrigin=url.origin===self.location.origin;
+
+  let localKey=null;
+  if(sameOrigin&&url.pathname.indexOf('/__gf__/')===0){
+    localKey=req.url;
+  }else if(url.hostname==='fonts.googleapis.com'&&url.pathname==='/css2'){
+    localKey=cssLocalKey(url.search.slice(1));
+  }else if(url.hostname==='fonts.gstatic.com'){
+    localKey=wLocalKey(url.href);
+  }else if(!sameOrigin){
+    return; /* GitHub API etc → network */
+  }
 
   event.respondWith((async function(){
     const cache=await caches.open(PACK);
-    const cached=await cache.match(req,{ignoreVary:true});
+    const cached=await cache.match(localKey||req,{ignoreVary:true});
     if(cached)return cached;
+
+    /* figure out the network source for a local-key miss */
+    let netUrl=null,kind=null;
+    if(localKey){
+      if(localKey.indexOf('/__gf__/css2?')!==-1){
+        netUrl=cssGoogleUrl(localKey.slice(localKey.indexOf('css2?')+5));
+        kind='css';
+      }else{
+        try{netUrl=decodeURIComponent(localKey.slice(localKey.indexOf('/__gf__/w/')+10));kind='font'}catch(e){}
+      }
+    }
+
     if(await loadAirgap()){
       const isPage=req.mode==='navigate'||(req.headers.get('accept')||'').indexOf('text/html')!==-1;
       if(isPage){
@@ -251,9 +329,33 @@ self.addEventListener('fetch',function(event){
       }
       return new Response('AIRGAP — NETWORK BLOCKED',{status:503,headers:{'Content-Type':'text/plain'}});
     }
+
     try{
+      if(netUrl){
+        const fresh=await fetch(new Request(netUrl,{mode:'cors',cache:'reload'}));
+        if(fresh&&fresh.ok){
+          if(kind==='css'){
+            const orig=await fresh.clone().text();
+            const san=sanitizeCss(orig);
+            await cache.put(localKey,new Response(san,{headers:{'Content-Type':'text/css'}}));
+            return new Response(san,{headers:{'Content-Type':'text/css'}});
+          }
+          await cache.put(localKey,fresh.clone());
+          return fresh;
+        }
+        return new Response('FONT MISS',{status:504,headers:{'Content-Type':'text/plain'}});
+      }
       const fresh=await fetch(req);
       if(fresh&&(fresh.ok||fresh.type==='opaque')){
+        const isPage=req.mode==='navigate'||(req.headers.get('accept')||'').indexOf('text/html')!==-1;
+        if(isPage&&fresh.ok){
+          try{
+            const text=sanitizeHtml(await fresh.clone().text());
+            const h={'Content-Type':'text/html; charset=utf-8'};
+            await cache.put(req,new Response(text,{headers:h}));
+            return new Response(text,{headers:h});
+          }catch(e){return fresh}
+        }
         try{await cache.put(req,fresh.clone())}catch(_){}
       }
       return fresh;
