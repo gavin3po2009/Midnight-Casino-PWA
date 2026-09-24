@@ -45,7 +45,7 @@ body::before{content:'';position:fixed;inset:0;z-index:-3;pointer-events:none;
 @keyframes sweep{from{top:-12%}to{top:112%}}
 @keyframes blink{50%{opacity:0}}
 @keyframes rot{to{transform:rotate(360deg)}}
-@keyframes shimmer{from{background-position:200% 0}to{background-position:-20% 0}}
+@keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 rgba(255,215,106,.55)}50%{box-shadow:0 0 14px 2px rgba(255,215,106,.35)}}
 
 .wrap{max-width:1180px;margin:0 auto;padding:26px 22px 40px;position:relative}
 
@@ -74,6 +74,7 @@ h1{font:700 clamp(16px,3.2vw,24px)/1 var(--px);letter-spacing:2px;margin:0;text-
 .ibtn{height:42px;width:46px;background:var(--panel);border:1px solid var(--line);color:var(--dim);border-radius:6px;font-size:17px;cursor:pointer;transition:.15s}
 .ibtn:hover{color:var(--neon);border-color:var(--line2)}
 .ibtn.spin{animation:rot .9s linear infinite;color:var(--neon)}
+.ibtn.glow{color:var(--amber);border-color:var(--amber);animation:pulseGlow 2s ease-in-out infinite}
 
 .msg{margin:0 0 14px;padding:10px 14px;border-radius:8px;font:600 12.5px var(--ui);letter-spacing:.03em;border:1px solid var(--line);background:var(--panel);color:var(--dim)}
 .msg.warn{color:var(--amber);border-color:rgba(255,215,106,.35)}
@@ -109,10 +110,6 @@ h1{font:700 clamp(16px,3.2vw,24px)/1 var(--px);letter-spacing:2px;margin:0;text-
 .body .desc{margin:7px 0 0;color:var(--faint);font-size:12px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .meta{margin:9px 0 0;font:500 11px var(--ui);color:var(--faint);letter-spacing:.06em;display:flex;gap:9px;flex-wrap:wrap;align-items:center}
 .meta .fname{color:var(--dim);font-family:ui-monospace,Menlo,monospace;font-size:10.5px}
-.skel{pointer-events:none}
-.skel .art{border:0;background:linear-gradient(100deg,var(--panel) 30%,var(--panel2) 50%,var(--panel) 70%);background-size:220% 100%;animation:shimmer 1.4s linear infinite}
-.skel .body::before{content:'';display:block;height:10px;width:70%;background:var(--line);margin-bottom:10px;border-radius:3px}
-.skel .body::after{content:'';display:block;height:8px;width:45%;background:var(--line);border-radius:3px}
 
 footer{margin-top:26px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;color:var(--faint);font:500 11.5px var(--ui);letter-spacing:.05em}
 footer b{color:var(--dim)}
@@ -145,7 +142,7 @@ footer b{color:var(--dim)}
   .clock{display:none}
 }
 @media (prefers-reduced-motion:reduce){
-  .scan::after,.cursor,.skel .art{animation:none}
+  .scan::after,.cursor,.ibtn.glow{animation:none}
 }
 </style>
 </head>
@@ -185,7 +182,7 @@ footer b{color:var(--dim)}
       <button data-sort="recent" type="button">RECENT</button>
       <button data-sort="top" type="button">TOP</button>
     </div>
-    <button class="ibtn" id="refreshBtn" type="button" title="Rescan repository for games">⟳</button>
+    <button class="ibtn" id="refreshBtn" type="button" title="Sync — refresh library & download the offline pack">⟳</button>
   </div>
 
   <div class="msg" id="msg" hidden></div>
@@ -197,7 +194,7 @@ footer b{color:var(--dim)}
 
   <footer>
     <div id="srcInfo">LIBRARY · —</div>
-    <div class="keys">CLICK A GAME TO PLAY FULLSCREEN · <b>ESC</b> RETURNS HERE · <b>BUILD 5</b></div>
+    <div class="keys">CLICK A GAME TO PLAY FULLSCREEN · <b>ESC</b> RETURNS HERE · <b>⟳ SYNC</b> FOR UPDATES · <b>BUILD 6</b></div>
   </footer>
 </div>
 
@@ -233,8 +230,7 @@ const CONFIG={
     'snakeyahu.html','mightyseagull.html','runfromverity.html','gambling.html'
   ],
   probeFolders:['','games/'],
-  scanSubfolders:true,
-  cacheMinutes:10
+  scanSubfolders:true
 };
 
 /* ---------- shorthand / env ---------- */
@@ -251,7 +247,7 @@ function dec(s){try{return decodeURIComponent(s)}catch(e){return s}}
 function resolveUrl(rel){try{return new URL(rel,location.href).href}catch(e){return rel}}
 const LAUNCHER_FILE=(()=>{const p=location.pathname.split('/').filter(Boolean);const last=p.length?dec(p[p.length-1]):'';return/\.html?$/i.test(last)?last.toLowerCase():'index.html'})();
 
-/* ---------- PWA: register the offline service worker ---------- */
+/* ---------- PWA: register the service worker ---------- */
 if('serviceWorker' in navigator && IS_HTTP){
   addEventListener('load',function(){
     navigator.serviceWorker.register('sw.js').catch(function(e){
@@ -259,7 +255,6 @@ if('serviceWorker' in navigator && IS_HTTP){
     });
   });
 }
-/* install prompt */
 let installPrompt=null;
 window.addEventListener('beforeinstallprompt',function(e){
   e.preventDefault();
@@ -275,14 +270,37 @@ window.addEventListener('appinstalled',function(){installBtn.hidden=true});
 if(matchMedia('(display-mode: standalone)').matches)installBtn.hidden=true;
 
 /* ---------- state ---------- */
-let GAMES=[], REPO_LABEL='', sortMode='az';
+let GAMES=[], REPO_LABEL='', sortMode='az', syncing=false;
 try{sortMode=localStorage.getItem('arcade.sort')||'az'}catch(e){sortMode='az'}
-const STATS_KEY='arcade.stats.v1', CACHE_KEY='arcade.library.v5';
+const STATS_KEY='arcade.stats.v1', LIB_KEY='arcade.library.v6', LIB_KEY_OLD='arcade.library.v5', SYNC_KEY='arcade.sync.v1';
 let stats={};
 try{stats=JSON.parse(localStorage.getItem(STATS_KEY))||{}}catch(e){}
 function saveStats(){try{localStorage.setItem(STATS_KEY,JSON.stringify(stats))}catch(e){}}
 function bumpStats(g){const s=stats[g.url]||{n:0,t:0};s.n++;s.t=Date.now();stats[g.url]=s;saveStats()}
 function mostRecentUrl(){let best=null,bt=0;for(const k in stats){if(stats[k].t>bt){bt=stats[k].t;best=k}}return best}
+
+/* ---------- library + sync records (localStorage = offline library) ---------- */
+function packGame(g){return{u:g.url,f:g.file,ti:g.title,de:g.desc,s:g.size}}
+function unpackGame(o){return{url:o.u,file:o.f||'game',title:o.ti||prettify(o.f||'game'),desc:o.de,size:o.s,source:'cache'}}
+function loadLibrary(){
+  const keys=[LIB_KEY,LIB_KEY_OLD];
+  for(const k of keys){
+    try{const d=JSON.parse(localStorage.getItem(k));if(d&&Array.isArray(d.list))return d}catch(e){}
+  }
+  return null;
+}
+function saveLibrary(){
+  try{localStorage.setItem(LIB_KEY,JSON.stringify({t:Date.now(),repo:REPO_LABEL,list:GAMES.map(packGame)}))}catch(e){}
+}
+function loadSyncRec(){try{const d=JSON.parse(localStorage.getItem(SYNC_KEY));if(d&&typeof d==='object')return d}catch(e){}return{last:0,sizes:{}}}
+function saveSyncRec(rec){try{localStorage.setItem(SYNC_KEY,JSON.stringify(rec))}catch(e){}}
+function relTime(t){
+  const s=Math.max(0,Math.floor((Date.now()-t)/1000));
+  if(s<60)return 'JUST NOW';
+  if(s<3600)return Math.floor(s/60)+'m AGO';
+  if(s<86400)return Math.floor(s/3600)+'h AGO';
+  return Math.floor(s/86400)+'d AGO';
+}
 
 /* ---------- utils ---------- */
 function hashString(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
@@ -409,7 +427,7 @@ async function loadGamesJson(){
   return[];
 }
 
-/* ---------- DIRECT FILE PROBE ---------- */
+/* ---------- direct file probe (sync-time fallback) ---------- */
 async function probeLive(){
   if(!IS_HTTP)return[];
   const found=[],seen=new Set();
@@ -438,7 +456,7 @@ async function probeLive(){
   return out;
 }
 
-/* ---------- merge all sources, fetch real titles ---------- */
+/* ---------- gather fresh library (sync-time only — never at boot) ---------- */
 async function gather(){
   const manual=CONFIG.games.map(normalizeEntry).filter(Boolean);
   const json=await loadGamesJson();
@@ -454,104 +472,168 @@ async function gather(){
   for(const g of manual)map.set(g.url,Object.assign({},map.get(g.url)||{},g));
   return{list:Array.from(map.values()),apiErr:apiErr,info:info,probed:probeGames.length};
 }
-async function decorate(games){
-  if(!IS_HTTP)return;
-  const targets=games.filter(g=>!g.titleLocked).slice(0,40);
-  await Promise.all(targets.map(async g=>{
-    try{
-      const u=new URL(g.url);
-      if(u.origin!==location.origin)return;
-      const r=await fetch(g.url,{cache:'no-store'});
-      if(!r.ok)return;
-      const doc=new DOMParser().parseFromString(await r.text(),'text/html');
-      const t=doc.querySelector('title');
-      if(t){const tt=t.textContent.trim();if(tt)g.title=tt.slice(0,90)}
-      const md=doc.querySelector('meta[name="description"],meta[property="og:description"]');
-      if(md){const d=(md.getAttribute('content')||'').trim();if(d)g.desc=d.slice(0,150)}
-    }catch(e){}
-  }));
+function emptyReason(apiErr){
+  if(apiErr&&apiErr.rateLimited)return 'GITHUB API RATE-LIMITED — TRY AGAIN IN A BIT';
+  if(apiErr&&apiErr.notFound)return 'GITHUB API CAN\'T LIST THE REPO — PRIVATE?';
+  if(apiErr&&apiErr.noRepo)return 'NO REPO CONFIGURED FOR THIS DOMAIN';
+  return 'NO .HTML GAMES FOUND IN THE REPO';
 }
 
-/* ---------- library cache ---------- */
-function packGame(g){return{u:g.url,f:g.file,ti:g.title,de:g.desc,s:g.size}}
-function unpackGame(o){return{url:o.u,file:o.f||'game',title:o.ti||prettify(o.f||'game'),desc:o.de,size:o.s,source:'cache'}}
-function loadCache(){try{const d=JSON.parse(localStorage.getItem(CACHE_KEY));if(d&&Array.isArray(d.list))return d}catch(e){}return null}
-function saveCacheList(list){try{localStorage.setItem(CACHE_KEY,JSON.stringify({t:Date.now(),repo:REPO_LABEL,list:list}))}catch(e){}}
+/* =====================================================================
+   SYNC — the only thing that ever touches the network
+   ===================================================================== */
+function pingWorker(sw){
+  return new Promise(function(res){
+    const to=setTimeout(function(){navigator.serviceWorker.removeEventListener('message',on);res(false)},600);
+    function on(ev){
+      const d=ev.data;
+      if(d&&d.__sync===true&&d.type==='pong'){
+        clearTimeout(to);navigator.serviceWorker.removeEventListener('message',on);res(true);
+      }
+    }
+    navigator.serviceWorker.addEventListener('message',on);
+    try{sw.postMessage({__sync:true,type:'ping'})}catch(e){clearTimeout(to);navigator.serviceWorker.removeEventListener('message',on);res(false)}
+  });
+}
+async function getSyncWorker(){
+  if(!('serviceWorker' in navigator))return null;
+  for(let i=0;i<12;i++){
+    let sw=navigator.serviceWorker.controller;
+    if(!sw){try{const reg=await navigator.serviceWorker.ready;sw=reg.active}catch(e){}}
+    if(sw&&await pingWorker(sw))return sw;
+    await new Promise(function(r){setTimeout(r,500)});
+  }
+  return null;
+}
+function swSync(items){
+  return new Promise(function(resolve,reject){
+    let timer=0;
+    function cleanup(){clearTimeout(timer);navigator.serviceWorker.removeEventListener('message',onMsg)}
+    function onMsg(ev){
+      const d=ev.data;
+      if(!d||d.__sync!==true)return;
+      if(d.type==='progress'){setMsg('SYNCING '+d.done+' / '+d.total,'load')}
+      else if(d.type==='done'){cleanup();resolve(d)}
+    }
+    navigator.serviceWorker.addEventListener('message',onMsg);
+    timer=setTimeout(function(){cleanup();reject({timeout:true})},180000);
+    getSyncWorker().then(function(sw){
+      if(!sw){cleanup();reject({noWorker:true});return}
+      sw.postMessage({__sync:true,type:'start',games:items});
+    }).catch(function(){cleanup();reject({error:true})});
+  });
+}
 
-/* ---------- discovery orchestration ---------- */
-async function discover(force){
-  if(!IS_HTTP){
-    GAMES=CONFIG.games.map(normalizeEntry).filter(Boolean);
-    renderAll();setMsg('');return;
-  }
-  const cached=loadCache();
-  const cacheAge=cached?Date.now()-cached.t:Infinity;
-  if(cached){
-    GAMES=cached.list.map(unpackGame);
-    REPO_LABEL=cached.repo||'';
-    renderAll();
-  }else{
-    renderSkeleton();
-  }
-  if(!force&&cacheAge<CONFIG.cacheMinutes*60000){setMsg('');return}
-  if(navigator.onLine===false){ /* offline: keep saved library, skip network */
-    if(!cached){GAMES=[];renderAll()}
-    setMsg('OFFLINE — SHOWING SAVED LIBRARY','warn');
-    return;
-  }
-  setMsg('SCANNING','load');
+async function syncNow(auto){
+  if(!IS_HTTP){setMsg('SYNC NEEDS THE SITE HOSTED OVER HTTP','warn');return}
+  if(syncing)return;
+  if(navigator.onLine===false){setMsg('OFFLINE — CAN\'T SYNC','warn');return}
+  syncing=true;
   refreshBtn.classList.add('spin');
-  let note='',noteKind='';
+  refreshBtn.classList.remove('glow');
+  setMsg(auto?'FIRST SYNC':'SYNCING','load');
+  let note='',kind='';
   try{
     const res=await gather();
     if(res.info)REPO_LABEL=res.info.owner+'/'+res.info.repo;
-    try{console.info('[OMNILAUNCHER b5] repo:',res.info?REPO_LABEL:'none',
+    try{console.info('[OMNILAUNCHER b6] sync | repo:',res.info?REPO_LABEL:'none',
       '| api:',res.apiErr?(res.apiErr.rateLimited?'rate-limited':res.apiErr.notFound?'not-listable':res.apiErr.noRepo?'no-repo':'error'):'ok',
-      '| probe hits:',res.probed,'| games:',res.list.length)}catch(e){}
-    if(res.list.length>0){
-      await decorate(res.list);
-      GAMES=res.list;
-      saveCacheList(res.list.map(packGame));
-      if(res.apiErr&&res.probed>0){
-        note='GITHUB API UNAVAILABLE — GAMES FOUND BY DIRECT FILE PROBE';
+      '| probe hits:',res.probed,'| library:',res.list.length)}catch(e){}
+    let list=res.list;
+    if(list.length>0){
+      /* only (re)download games that are new or whose size changed */
+      const rec=loadSyncRec();
+      const dl=list.filter(function(g){
+        if(g.titleLocked)return true;
+        const known=rec.sizes[g.url];
+        return !(g.size&&known===g.size);
+      }).map(function(g){return{url:g.url}});
+
+      const result=await swSync(dl);
+
+      if(result.failed&&result.failed.length){
+        const bad={};
+        result.failed.forEach(function(u){bad[u]=1});
+        list=list.filter(function(g){return !bad[g.url]||g.titleLocked});
       }
-    }else{
-      if(cached&&cached.list.length>0){
-        note='SCAN FOUND NOTHING — KEEPING SAVED LIST';
-        noteKind='warn';
-      }else{
-        GAMES=[];
-        const bits=[];
-        if(res.apiErr){
-          if(res.apiErr.rateLimited)bits.push('API rate-limited');
-          else if(res.apiErr.notFound)bits.push('API can\'t list repo (private or renamed)');
-          else if(res.apiErr.noRepo)bits.push('no repo configured');
-          else bits.push('API error');
-        }else{
-          bits.push('repo scanned, 0 .html files');
+      if(result.titles){
+        for(const u in result.titles){
+          for(const g of list){
+            if(g.url===u&&!g.titleLocked){
+              const t=result.titles[u];
+              if(t.t)g.title=t.t;
+              if(t.d)g.desc=t.d;
+              break;
+            }
+          }
         }
-        bits.push('0 games found live on '+location.hostname);
-        note=bits.join(' · ');
-        noteKind='warn';
       }
+      GAMES=list;
+      saveLibrary();
+      const sizes={};
+      list.forEach(function(g){if(g.size)sizes[g.url]=g.size});
+      saveSyncRec({last:Date.now(),sizes:sizes});
+      if(result.changed){
+        setMsg('SYNCED — APPLYING UPDATE…','load');
+        setTimeout(function(){location.reload()},1400);
+        return;
+      }
+      note='EVERYTHING UP TO DATE — '+GAMES.length+' GAMES READY OFFLINE';
+    }else{
+      if(GAMES.length){note='SYNC FOUND NOTHING — KEEPING SAVED LIBRARY';kind='warn'}
+      else{GAMES=[];note=emptyReason(res.apiErr);kind='warn'}
     }
   }catch(e){
-    note='SCAN FAILED — NETWORK?';noteKind='warn';
-    try{console.warn('[OMNILAUNCHER b5]',e)}catch(_){}
+    note='SYNC FAILED — CHECK CONNECTION';kind='warn';
+    try{console.warn('[OMNILAUNCHER b6] sync error',e)}catch(_){}
   }
+  syncing=false;
   refreshBtn.classList.remove('spin');
   renderAll();
-  setMsg(note,noteKind);
+  setMsg(note,kind);
+  if(!kind)setTimeout(function(){if(!syncing)setMsg('')},5000);
 }
-function renderSkeleton(){
-  grid.textContent='';emptyEl.hidden=true;
-  for(let i=0;i<6;i++){const d=document.createElement('div');d.className='card skel';d.innerHTML='<div class="art"></div><div class="body"></div>';grid.appendChild(d)}
-  countEl.textContent='… GAMES';
+
+function updateSyncUI(){
+  const rec=loadSyncRec();
+  const stale=!rec.last||Date.now()-rec.last>86400e3;
+  refreshBtn.classList.toggle('glow',IS_HTTP&&navigator.onLine!==false&&stale&&!syncing);
+  const when=rec.last?('SYNCED '+relTime(rec.last).toLowerCase()):'NEVER SYNCED';
+  srcEl.textContent='LIBRARY · '+(REPO_LABEL||'manual')+(GAMES.length?' · '+GAMES.length+' TITLES':'')+' · '+when;
 }
-addEventListener('online',function(){setMsg('');discover(true)});
+addEventListener('online',function(){setMsg('');updateSyncUI()});
 addEventListener('offline',function(){
   if(GAMES.length)setMsg('OFFLINE — SHOWING SAVED LIBRARY','warn');
+  updateSyncUI();
 });
+
+/* ---------- boot: zero network — saved library only ---------- */
+function boot(){
+  if(!IS_HTTP){
+    GAMES=CONFIG.games.map(normalizeEntry).filter(Boolean);
+    renderAll();return;
+  }
+  const saved=loadLibrary();
+  const rec=loadSyncRec();
+  if(saved){
+    const savedGames=saved.list.map(unpackGame);
+    REPO_LABEL=saved.repo||'';
+    const manual=CONFIG.games.map(normalizeEntry).filter(Boolean);
+    GAMES=savedGames.concat(manual.filter(function(m){
+      return !savedGames.some(function(g){return g.url===m.url});
+    }));
+  }else{
+    GAMES=[];
+  }
+  renderAll();
+  if(!rec.last){
+    if(navigator.onLine!==false){
+      syncNow(true); /* first run (or migration) — the one-time burst */
+    }else{
+      setMsg('OFFLINE — CONNECT ONCE AND PRESS ⟳ SYNC','warn');
+    }
+  }
+}
 
 /* =====================================================================
    CARD ART
@@ -791,22 +873,21 @@ function buildEmpty(q){
     emptyEl.appendChild(p);
     return;
   }
-  h.textContent='NO GAMES FOUND';
+  h.textContent='NO GAMES YET';
   emptyEl.appendChild(h);
   const ol=document.createElement('ol');
   const items=[
     'Commit your game <code>.html</code> files next to <code>index.html</code> in the repo (a <code>games/</code> subfolder works too).',
-    'Quick check — open <code>https://'+location.hostname+'/gambling.html</code> directly: if that page loads, the launcher will find it; if it 404s, the file isn\'t deployed yet.',
-    'Wait ~30s for GitHub Pages, then press <b>⟳ RESCAN</b> (and hard-refresh with <b>Ctrl+Shift+R</b> if the page looks stale).'
+    'Get online for a moment and press <b>⟳ SYNC</b> — every game downloads once (a few seconds), then the launcher works fully offline.',
+    'After that first sync, zero internet is used until you choose to sync again.'
   ];
   items.forEach(t=>{const li=document.createElement('li');li.innerHTML=t;ol.appendChild(li)});
   emptyEl.appendChild(ol);
   const p=document.createElement('p');p.className='fine';
   let extra='';
-  if(!IS_HTTP)extra=' Opened from disk (file://) — no network scanning here; list games in <code>CONFIG.games</code>.';
+  if(!IS_HTTP)extra=' Opened from disk (file://) — list games in <code>CONFIG.games</code>.';
   else if(!detectRepo())extra=' No repo detected — set <code>CONFIG.repo</code>.';
-  else extra=' Scanned: '+(CONFIG.repo||'auto')+' · direct probes on '+location.hostname+' found 0 games. If the API can\'t list a private repo, add filenames to <code>CONFIG.probeFiles</code>.';
-  p.innerHTML='Manual options: <code>games.json</code> or <code>CONFIG.games</code>.'+extra;
+  p.innerHTML='Offline and never synced: connect once, then press <b>⟳ SYNC</b>.'+extra;
   emptyEl.appendChild(p);
 }
 function renderGrid(){
@@ -821,7 +902,7 @@ function renderGrid(){
 }
 function renderAll(){
   renderGrid();
-  srcEl.textContent='LIBRARY · '+(REPO_LABEL||'manual')+(GAMES.length?' · '+GAMES.length+' TITLES':'');
+  updateSyncUI();
 }
 
 /* =====================================================================
@@ -1031,7 +1112,7 @@ document.querySelectorAll('#sortSeg button').forEach(b=>{
   });
 });
 document.querySelectorAll('#sortSeg button').forEach(b=>b.classList.toggle('on',b.dataset.sort===sortMode));
-refreshBtn.addEventListener('click',()=>discover(true));
+refreshBtn.addEventListener('click',function(){syncNow(false)});
 
 function redrawArt(){for(const job of artJobs)drawArt(job[0],job[1])}
 if(document.fonts&&document.fonts.load){
@@ -1043,8 +1124,8 @@ if(document.fonts&&document.fonts.load){
  $('brandTitle').textContent=CONFIG.title;
 document.title=CONFIG.title+' — Game Launcher';
 if(!fsSupported())pFs.style.display='none';
-try{console.info('[OMNILAUNCHER] build 5 running on '+location.href)}catch(e){}
-discover(false);
+try{console.info('[OMNILAUNCHER] build 6 · zero-network boot · sync on demand')}catch(e){}
+boot();
 })();
 </script>
 </body>
