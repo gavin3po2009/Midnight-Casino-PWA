@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Israel Clicker — a tiny pixel empire</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0b0918;
+  --bg:#141126;
+  --panel:#1e1a38;
+  --panel2:#282248;
+  --panel3:#332c5c;
+  --txt:#f2ead8;
+  --dim:#9a91c0;
+  --gold:#f0b429;
+  --blue:#3f66d4;
+  --green:#8ac650;
+  --red:#e2604f;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:var(--bg);
+  background-image:repeating-conic-gradient(rgba(255,255,255,.014) 0% 25%,transparent 0% 50%);
+  background-size:14px 14px;
+  color:var(--txt);
+  font-family:'VT323',monospace;
+  overflow:hidden;
+  display:flex;flex-direction:column;
+  -webkit-tap-highlight-color:transparent;
+}
+::selection{background:var(--gold);color:var(--ink)}
+canvas.pix{image-rendering:pixelated;display:block}
+#star,.row,.badge,.pbtn,.amt,.tab,.chip{user-select:none;-webkit-user-select:none}
+
+/* pixel notched frames */
+.px3{box-shadow:-3px 0 0 0 var(--ink),3px 0 0 0 var(--ink),0 -3px 0 0 var(--ink),0 3px 0 0 var(--ink)}
+.px4{box-shadow:-4px 0 0 0 var(--ink),4px 0 0 0 var(--ink),0 -4px 0 0 var(--ink),0 4px 0 0 var(--ink)}
+
+/* CRT overlay */
+#crt{position:fixed;inset:0;z-index:600;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(4,3,10,.22) 0 2px,transparent 2px 4px)}
+#crt::after{content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at 50% 45%,transparent 60%,rgba(4,3,10,.5))}
+
+/* header */
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:14px 18px;background:var(--panel);border-bottom:4px solid var(--ink);flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:14px}
+.brand h1{font-family:'Press Start 2P';font-size:15px;letter-spacing:1px;text-shadow:3px 3px 0 var(--ink)}
+.brand h1 em{font-style:normal;color:var(--gold)}
+.brand small{display:block;margin-top:7px;font-size:15px;color:var(--dim);letter-spacing:1px}
+.bal{text-align:right}
+.bal .lbl{font-family:'Press Start 2P';font-size:8px;color:var(--dim);letter-spacing:2px}
+#credits{font-family:'Press Start 2P';font-size:clamp(16px,3vw,26px);color:var(--gold);
+  text-shadow:3px 3px 0 var(--ink);margin:9px 0 7px}
+#credits.pop{animation:pop .18s}
+@keyframes pop{50%{transform:scale(1.06)}}
+#cpsLine{font-size:16px;color:var(--txt)}
+
+/* main */
+main{flex:1;min-height:0;display:flex;gap:14px;padding:14px}
+.panel{background:var(--panel)}
+#stage{flex:1.2;position:relative;overflow:hidden;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:18px;padding:22px}
+#shop{flex:1;min-width:340px;max-width:520px;display:flex;flex-direction:column}
+
+/* stage */
+.skyline{position:absolute;left:0;right:0;bottom:0;height:56px;background-repeat:repeat-x;
+  background-position:bottom left;background-size:auto 100%;image-rendering:pixelated;
+  pointer-events:none;opacity:.9}
+.starwrap{position:relative;z-index:2}
+#star{width:clamp(170px,24vmin,290px);aspect-ratio:33/37;image-rendering:pixelated;
+  cursor:pointer;transform-origin:50% 78%;touch-action:manipulation;outline:none}
+#star:focus-visible{box-shadow:0 0 0 3px var(--gold)}
+.bubble{position:absolute;bottom:calc(100% + 16px);left:50%;
+  transform:translateX(-50%) translateY(5px);
+  background:var(--txt);color:#241c3a;font-size:19px;line-height:1;padding:8px 12px;
+  white-space:nowrap;opacity:0;transition:opacity .15s,transform .15s;pointer-events:none;z-index:4;
+  box-shadow:-3px 0 0 var(--ink),3px 0 0 var(--ink),0 -3px 0 var(--ink),0 3px 0 var(--ink)}
+.bubble::after{content:'';position:absolute;left:50%;bottom:-8px;width:8px;height:8px;
+  background:var(--txt);transform:translateX(-50%)}
+.bubble.on{opacity:1;transform:translateX(-50%) translateY(0)}
+.chips{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;z-index:2}
+.chip{background:var(--panel2);padding:9px 13px;font-family:'Press Start 2P';font-size:7px;
+  color:var(--dim);letter-spacing:1px;text-align:center}
+.chip b{display:block;font-size:11px;color:var(--txt);margin-top:7px;font-weight:normal}
+.floatlayer{position:absolute;inset:0;pointer-events:none;z-index:3;overflow:hidden}
+.ftext{position:absolute;font-family:'Press Start 2P';font-size:11px;color:#f7d75a;
+  text-shadow:2px 2px 0 var(--ink);animation:fup .9s ease-out forwards;white-space:nowrap}
+@keyframes fup{from{opacity:1;transform:translate(-50%,0)}to{opacity:0;transform:translate(calc(-50% + var(--dx,0px)),-64px)}}
+.spark{position:absolute;width:3px;height:3px;background:#ffe9a3;
+  box-shadow:0 -3px 0 #ffe9a3,0 3px 0 #ffe9a3,-3px 0 0 #ffe9a3,3px 0 0 #ffe9a3;
+  animation:sp 1.4s ease-out forwards}
+@keyframes sp{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-44px) scale(.3)}}
+
+/* shop */
+.tabs{display:flex;border-bottom:3px solid var(--ink)}
+.tab{flex:1;font-family:'Press Start 2P';font-size:9px;padding:13px 4px;background:var(--panel3);
+  color:var(--dim);border:0;cursor:pointer;position:relative;letter-spacing:1px}
+.tab+.tab{border-left:3px solid var(--ink)}
+.tab.on{background:var(--gold);color:var(--ink)}
+.tab .dot{display:none;position:absolute;top:-5px;right:-5px;width:9px;height:9px;
+  background:var(--green);box-shadow:0 0 0 2px var(--ink)}
+.tab.alert .dot{display:block}
+.buybar{display:none;align-items:center;gap:8px;padding:9px 12px;border-bottom:3px solid var(--ink);background:#191537}
+.buybar span{font-size:16px;color:var(--dim)}
+.amt{font-family:'VT323',monospace;font-size:17px;line-height:1;padding:5px 9px 4px;
+  background:var(--panel3);color:var(--dim);border:0;cursor:pointer;
+  box-shadow:-2px 0 0 var(--ink),2px 0 0 var(--ink),0 -2px 0 var(--ink),0 2px 0 var(--ink)}
+.amt.on{background:var(--txt);color:var(--ink)}
+.list{flex:1;overflow-y:auto;min-height:0;padding:12px}
+.list::-webkit-scrollbar{width:14px}
+.list::-webkit-scrollbar-track{background:#151129}
+.list::-webkit-scrollbar-thumb{background:var(--panel3);border:4px solid #151129}
+.info{border-top:3px solid var(--ink);background:#171331;padding:10px 14px;min-height:68px;
+  font-size:17px;line-height:1.35;color:var(--dim)}
+.info b{color:var(--gold);font-weight:normal}
+
+/* shop rows */
+.row{display:flex;align-items:center;gap:12px;padding:10px 12px;margin-bottom:9px;background:var(--panel2)}
+.row .meta{flex:1;min-width:0}
+.r1{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.nm{font-family:'Press Start 2P';font-size:8px;letter-spacing:1px}
+.own{font-family:'Press Start 2P';font-size:10px;color:var(--gold)}
+.r2{display:flex;justify-content:space-between;margin-top:7px;gap:8px}
+.cost{font-family:'Press Start 2P';font-size:9px;color:var(--red)}
+.each{font-size:15px;color:var(--dim)}
+.row.ok{cursor:pointer}
+.row.ok .cost{color:var(--green)}
+.row.ok:hover{background:var(--panel3)}
+.row:not(.ok) canvas.icon{filter:grayscale(1) brightness(.55)}
+.row.bought{animation:bflash .35s}
+@keyframes bflash{30%{background:var(--gold)}}
+.row.deny{animation:deny .22s}
+@keyframes deny{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.empty{padding:34px 10px;text-align:center;color:var(--dim);font-size:18px;line-height:1.5}
+
+/* awards */
+.ahead{font-size:16px;color:var(--dim);margin-bottom:11px}
+.ahead b{color:var(--gold);font-weight:normal}
+.agrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:9px}
+.badge{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 6px 9px;
+  background:var(--panel2);text-align:center}
+.badge span{font-family:'Press Start 2P';font-size:6px;color:var(--dim);line-height:1.6}
+.badge.got{background:#2c2454}
+.badge.got span{color:var(--gold)}
+.badge:not(.got) canvas{filter:grayscale(1) brightness(.5)}
+
+/* footer */
+footer{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--panel);
+  border-top:4px solid var(--ink);flex-wrap:wrap}
+.fbtns{display:flex;gap:10px}
+#lastSave{font-size:15px;color:var(--dim)}
+.ticker{flex:1;min-width:220px;display:flex;align-items:center;border-left:3px solid var(--ink);padding-left:12px}
+.tlabel{font-family:'Press Start 2P';font-size:8px;color:var(--ink);background:var(--gold);
+  padding:5px 7px 4px;margin-right:12px;white-space:nowrap}
+.tclip{flex:1;overflow:hidden}
+.tin{white-space:nowrap;display:inline-block;font-size:17px;color:var(--dim);animation:tick 42s linear infinite}
+.ticker:hover .tin{animation-play-state:paused}
+@keyframes tick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* pixel buttons */
+.pbtn{font-family:'Press Start 2P';font-size:9px;padding:10px 12px 9px;border:0;cursor:pointer;
+  color:#2a1c04;background:var(--gold);letter-spacing:1px;
+  box-shadow:-3px 0 0 var(--ink),3px 0 0 var(--ink),0 -3px 0 var(--ink),0 3px 0 var(--ink),0 7px 0 var(--ink)}
+.pbtn:active{transform:translateY(4px);
+  box-shadow:-3px 0 0 var(--ink),3px 0 0 var(--ink),0 -3px 0 var(--ink),0 3px 0 var(--ink),0 3px 0 var(--ink)}
+.pbtn.danger{background:#d95740;color:#2d0b06}
+.pbtn.ghost{background:var(--panel3);color:var(--txt)}
+
+/* toasts */
+#toasts{position:fixed;left:16px;bottom:16px;z-index:400;display:flex;flex-direction:column;gap:8px;max-width:330px}
+.toast{background:#171331;padding:10px 14px;animation:tin2 .22s ease-out}
+.toast b{font-family:'Press Start 2P';font-size:8px;color:var(--gold);display:block;margin-bottom:6px;letter-spacing:1px}
+.toast p{font-size:17px;line-height:1.3;color:var(--txt)}
+.toast p b{display:inline;font-family:'VT323',monospace;font-size:17px;letter-spacing:0;color:var(--gold)}
+.toast.out{opacity:0;transform:translateX(-14px);transition:.3s}
+@keyframes tin2{from{opacity:0;transform:translateX(-18px)}}
+
+/* modal */
+.overlay{position:fixed;inset:0;background:rgba(8,6,18,.82);display:none;
+  align-items:center;justify-content:center;z-index:500;padding:16px}
+.overlay.open{display:flex}
+.modal{background:var(--panel);padding:22px;max-width:460px;width:100%}
+.modal h3{font-family:'Press Start 2P';font-size:12px;color:var(--red);margin-bottom:15px;letter-spacing:1px}
+.modal p{font-size:19px;line-height:1.4;margin-bottom:18px}
+.mrow{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+
+/* golden star event */
+.goldstar{position:fixed;left:0;top:0;z-index:350;cursor:pointer}
+.goldstar canvas{animation:wob .7s ease-in-out infinite alternate}
+@keyframes wob{from{transform:rotate(-12deg) scale(1)}to{transform:rotate(12deg) scale(1.12)}}
+
+@media(max-width:900px){
+  body{overflow:auto}
+  main{flex-direction:column}
+  #stage{min-height:460px}
+  #shop{max-width:none;min-width:0;flex:0 0 auto}
+  .list{max-height:44vh}
+}
+</style>
+</head>
+<body>
+<div id="crt"></div>
+
+<header>
+  <div class="brand">
+    <span id="headStar"></span>
+    <div>
+      <h1>ISRAEL <em>CLICKER</em></h1>
+      <small>a tiny pixel empire &middot; v1.1</small>
+    </div>
+  </div>
+  <div class="bal">
+    <div class="lbl">SOCIAL CREDIT</div>
+    <div id="credits">0</div>
+    <div id="cpsLine">0 / SEC</div>
+  </div>
+</header>
+
+<main>
+  <section id="stage" class="panel px4">
+    <div class="starwrap" id="starWrap">
+      <div class="bubble" id="bubble">KA-CHING!</div>
+      <canvas id="star" width="33" height="37" tabindex="0" role="button" aria-label="Click the star to earn social credit"></canvas>
+    </div>
+    <div class="chips">
+      <div class="chip px3">PER CLICK<b id="cPerClick">1</b></div>
+      <div class="chip px3">PER SECOND<b id="cPerSec">0</b></div>
+      <div class="chip px3">TOTAL CLICKS<b id="cClicks">0</b></div>
+      <div class="chip px3">AWARD BONUS<b id="cAch">+0%</b></div>
+    </div>
+    <div class="floatlayer" id="fl"></div>
+    <div class="skyline" id="skyline"></div>
+  </section>
+
+  <aside id="shop" class="panel px4">
+    <div class="tabs">
+      <button class="tab on" data-t="business">BUSINESS</button>
+      <button class="tab" data-t="upgrades" id="tabUpg">UPGRADES<span class="dot"></span></button>
+      <button class="tab" data-t="awards">AWARDS</button>
+    </div>
+    <div class="buybar" id="buyBar">
+      <span>BUY</span>
+      <button class="amt on" data-a="1">x1</button>
+      <button class="amt" data-a="10">x10</button>
+      <button class="amt" data-a="100">x100</button>
+      <button class="amt" data-a="max">MAX</button>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="info" id="info"></div>
+  </aside>
+</main>
+
+<footer>
+  <div class="fbtns">
+    <button class="pbtn" id="btnSave">SAVE</button>
+    <button class="pbtn danger" id="btnReset">RESET</button>
+    <button class="pbtn ghost" id="btnSound">SOUND:ON</button>
+  </div>
+  <span id="lastSave">LAST SAVE: &mdash;</span>
+  <div class="ticker">
+    <span class="tlabel">PIXEL WIRE</span>
+    <div class="tclip"><div class="tin" id="tin"></div></div>
+  </div>
+</footer>
+
+<div id="toasts"></div>
+
+<div class="overlay" id="overlay">
+  <div class="modal px4">
+    <h3>RESET EVERYTHING?</h3>
+    <p>This wipes your credits, your businesses and every award. There is no undo, and the star will pretend it never knew you.</p>
+    <div class="mrow">
+      <button class="pbtn ghost" id="mNo">KEEP PLAYING</button>
+      <button class="pbtn danger" id="mYes">YES, WIPE IT</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============ utils ============ */
+const $=id=>document.getElementById(id);
+const fmtTime=s=>{s=Math.floor(s);if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'m';return Math.floor(s/3600)+'h '+Math.floor(s%3600/60)+'m';};
+function fmt(n){
+  if(!isFinite(n))return'A LOT';
+  if(n<1000){const f=Math.floor(n);return(n-f<0.005||f>=100)?String(f):(n<10?n.toFixed(1):String(Math.round(n)));}
+  if(n<1e6)return Math.floor(n).toLocaleString('en-US');
+  const U=['K','M','B','T','Qa','Qi','Sx','Sp'];let u=-1;
+  while(n>=1000&&u<U.length-1){n/=1000;u++;}
+  return(n>=100?n.toFixed(0):n>=10?n.toFixed(1):n.toFixed(2))+U[u];
+}
+
+/* ============ game data ============ */
+const BUILDINGS=[
+  {id:'falafel', name:'FALAFEL STAND',      flavor:'Crispy on the outside, profitable on the inside.',       base:15,     sps:0.5},
+  {id:'kibbutz', name:'KIBBUTZ FARM',       flavor:'Fresh produce, fresh shekels, early mornings.',          base:120,    sps:3},
+  {id:'spa',     name:'DEAD SEA SPA',       flavor:'Float your money — it rises on its own.',                base:900,    sps:16},
+  {id:'startup', name:'TECH STARTUP',       flavor:'Disrupting the disruption industry since lunch.',        base:6500,   sps:90},
+  {id:'diamond', name:'DIAMOND EXCHANGE',   flavor:'Shine bright, sell higher, never negotiate first.',      base:48000,  sps:520},
+  {id:'solar',   name:'SOLAR ARRAY',        flavor:'The desert finally pays rent.',                          base:360000, sps:2900},
+  {id:'pad',     name:'LAUNCH PAD',         flavor:'Next stop: low orbit, high yield.',                      base:2.7e6,  sps:16000},
+  {id:'printer', name:'SHEKEL PRINTER',     flavor:'Brrrrrrr.',                                              base:2e7,    sps:95000},
+  {id:'desal',   name:'DESALINATION PLANT', flavor:'Fresh water out, salty profits in.',                     base:1.5e8,  sps:560000},
+  {id:'drip',    name:'DRIP IRRIGATION CO.',flavor:'A slow, steady drip of pure profit.',                    base:1.15e9, sps:3.3e6},
+  {id:'cyber',   name:'CYBER FORTRESS',     flavor:'The hackers knock politely and leave.',                  base:8.8e9,  sps:1.9e7},
+  {id:'quantum', name:'QUANTUM LAB',        flavor:"The money exists and doesn't until observed.",           base:6.8e10, sps:1.1e8},
+  {id:'moon',    name:'MOON BASE',          flavor:'One small click for man, one giant payout for mankind.', base:5.2e11, sps:6.4e8},
+  {id:'wormhole',name:'WORMHOLE TOLLBOOTH', flavor:'Every dimension pays the toll. In shekels.',             base:4e12,   sps:3.8e9},
+];
+const UPGRADES=[
+  {id:'u1', icon:'cursor', name:'STRONG THUMB',       desc:'Physiotherapy recommended. +1 social credit per click.',                          cost:100,   clickAdd:1},
+  {id:'u2', icon:'falafel',name:'DOUBLE HUMMUS',      desc:'Two scoops, twice the power. +4 per click.',                                      cost:1500,  clickAdd:4},
+  {id:'u3', icon:'cursor', name:'THUMB OF STEEL',     desc:'Forged in the gym, tempered in pita. +18 per click.',                             cost:15000, clickAdd:18},
+  {id:'u4', icon:'chip',   name:'SILICON WADI GLOVES',desc:'Ergonomic. Expensive. Effective. +90 per click.',                                 cost:150000,clickAdd:90},
+  {id:'u5', icon:'star',   name:'KOTEL BLESSING',     desc:'An ancient blessing, freshly notarized. Click power x2.',                         cost:400000,clickMult:2},
+  {id:'u6', icon:'cursor', name:'MEGA THUMB',         desc:'It has its own area code. +500 per click.',                                       cost:2e6,   clickAdd:500},
+  {id:'u7', icon:'chip',   name:'DIVINE SYNC',        desc:'Every click taps straight into the flow. Clicks also gain +1% of per-second income.',cost:8e6, spsPct:0.01},
+  {id:'u8', icon:'star',   name:'SHABBAT MODE',       desc:'Rest-based economics. All income x2.',                                            cost:4e7,   cpsMult:2},
+  {id:'u9', icon:'diamond',name:'DIAMOND KNUCKLES',   desc:'For particularly firm handshakes. +2,500 per click.',                             cost:6e7,   clickAdd:2500},
+  {id:'u10',icon:'cursor', name:'CHUTZPAH OVERFLOW',  desc:'Unreasonable confidence, quantified. Click power x3.',                            cost:1.2e8, clickMult:3},
+  {id:'u11',icon:'solar',  name:'PATENT OFFICE',      desc:'Ideas compound better than interest. All income x3.',                             cost:6e8,   cpsMult:3},
+  {id:'u12',icon:'cursor', name:'ANTI-GRAV THUMB',    desc:'Zero gravity, maximum clicking. +12,000 per click.',                              cost:3e9,   clickAdd:12000},
+  {id:'u13',icon:'quantum',name:'QUANTUM CLICKING',   desc:"You clicked and you didn't. Both timelines pay. Clicks also gain +2% of per-second income.",cost:2e10, spsPct:0.02},
+  {id:'u14',icon:'moon',   name:'LUNAR ECONOMICS',    desc:'Low gravity, high margins. All income x3.',                                       cost:1.5e11,cpsMult:3},
+  {id:'u15',icon:'wormhole',name:'INTERDIMENSIONAL HAGGLING',desc:'Negotiate across timelines. Click power x5.',                              cost:8e11,  clickMult:5},
+  {id:'u16',icon:'star',   name:'MIRACLE PROTOCOL',   desc:'All income x5. Somewhere, an accountant weeps.',                                  cost:4e12,  cpsMult:5},
+];
+const totalB=()=>BUILDINGS.reduce((s,b)=>s+(state.b[b.id]||0),0);
+const ACHS=[
+  {id:'a1', name:'MAZEL TOV!',          desc:'Click the star once.',              cond:()=>state.clicks>=1},
+  {id:'a2', name:'HUMMUS AMONG US',     desc:'Own 10 Falafel Stands.',            cond:()=>(state.b.falafel||0)>=10},
+  {id:'a3', name:'GREEN THUMB',         desc:'Own 10 Kibbutz Farms.',             cond:()=>(state.b.kibbutz||0)>=10},
+  {id:'a4', name:'START-UP NATION',     desc:'Own a Tech Startup.',               cond:()=>(state.b.startup||0)>=1},
+  {id:'a5', name:'A DIAMOND IS FOREVER',desc:'Own a Diamond Exchange.',           cond:()=>(state.b.diamond||0)>=1},
+  {id:'a6', name:'CARPAL DIEM',         desc:'500 total clicks.',                 cond:()=>state.clicks>=500},
+  {id:'a7', name:'SHEKELIONAIRE',       desc:'Earn 1,000,000 total.',             cond:()=>state.total>=1e6},
+  {id:'a8', name:'SPACE RACE',          desc:'Own a Launch Pad.',                 cond:()=>(state.b.pad||0)>=1},
+  {id:'a9', name:'BUSINESS EMPIRE',     desc:'Own 100 buildings in total.',       cond:()=>totalB()>=100},
+  {id:'a10',name:'SOCIAL CREDIT TSAR',  desc:'Earn 1,000,000,000 total.',         cond:()=>state.total>=1e9},
+  {id:'a11',name:'FRESH WATER FUND',    desc:'Own a Desalination Plant.',         cond:()=>(state.b.desal||0)>=1},
+  {id:'a12',name:'DRIP BY DRIP',        desc:'Own 10 Drip Irrigation Cos.',       cond:()=>(state.b.drip||0)>=10},
+  {id:'a13',name:'UNHACKABLE',          desc:'Own a Cyber Fortress.',             cond:()=>(state.b.cyber||0)>=1},
+  {id:'a14',name:'SUPERPOSITION',       desc:'Own a Quantum Lab.',                cond:()=>(state.b.quantum||0)>=1},
+  {id:'a15',name:'ONE SMALL CLICK',     desc:'Own a Moon Base.',                  cond:()=>(state.b.moon||0)>=1},
+  {id:'a16',name:'INTERDIMENSIONAL',    desc:'Own a Wormhole Tollbooth.',         cond:()=>(state.b.wormhole||0)>=1},
+  {id:'a17',name:'MEGACORP',            desc:'Own 250 buildings in total.',       cond:()=>totalB()>=250},
+  {id:'a18',name:'SOCIAL CREDIT DEITY', desc:'Earn 1 trillion total.',            cond:()=>state.total>=1e12},
+];
+const NEWS=[
+  'BREAKING: local falafel stand reports record hummus throughput',
+  'ECONOMY: experts agree that clicking the star remains the backbone of the nation',
+  'WEATHER: sunny with a 90% chance of start-ups',
+  'DEAD SEA UPDATE: still salty, still profitable',
+  'TIP: every award grants +2% income. collect them all',
+  'OPINION: hummus is a liquid asset, say analysts',
+  'REMINDER: the game autosaves every 20 seconds. sleep well',
+  'TECH SECTOR BOOM: entrepreneur raises funding round by clicking aggressively',
+  'TRAFFIC: mild congestion reported near the Diamond Exchange',
+  'SPORTS: national thumb-wrestling finals end in record clickrate',
+  'CULTURE: star-shaped monuments voted most huggable landmarks',
+  'WATER SECTOR: desalination plant described as "wet printer" by local economist',
+  'AGRICULTURE: drip irrigation CEO insists the money "grows on rows"',
+  'CYBER: fortress reportedly unhackable, hacker demands refund',
+  'SCIENCE: quantum lab money exists and does not exist, auditors baffled',
+  'SPACE: moon base rent described as "astronomical, but worth it"',
+  'TRANSIT: wormhole tollbooth revenue exceeds four dimensions of expectations',
+];
+const QUIPS=['KA-CHING!','MORE! MORE!','SHEKELS!','SO SHINY!','MAZEL TOV!','BLESSED!','HIGHLY PROFITABLE','CHAI CHAI CHAI',"THAT'S THE STUFF",'*happy star noises*'];
+
+/* ============ pixel sprites ============ */
+const SPRITES={
+  falafel:{pal:{t:'#8a5a28',p:'#d8a558',g:'#5f8f3a'},rows:[
+    '..tttttt..','.tppppppt.','tppgppgppt','tpppggpppt','tppgppgppt',
+    'tppppppppt','.tppppppt.','..tttttt..','..........','..........']},
+  kibbutz:{pal:{r:'#c0503c',w:'#e8e0d0',d:'#6b3a24',g:'#5f8f3a'},rows:[
+    '....rr....','...rrrr...','..rrrrrr..','.rrrrrrrr.','.rwwwwwwr.',
+    '.rwwddwwr.','.rwwddwwr.','.rwwwwwwr.','.gggggggg.','..........']},
+  spa:{pal:{s:'#f0c04a',S:'#f7e08a',b:'#3a6fd4',c:'#8fc0f5'},rows:[
+    '..ssss....','.ssSSSss..','..ssss....','..........','.bbbbbbbb.',
+    '.bbcbcbbb.','.bbbbbbbb.','.bbcbbcbb.','.bbbbbbbb.','..........']},
+  startup:{pal:{d:'#4a4560',g:'#3a7f4f',c:'#57e0c8'},rows:[
+    '..d.dd.d..','.dddddddd.','.dggggggd.','.dg.cc.gd.','.dg.cc.gd.',
+    '.dggggggd.','.dddddddd.','..d.dd.d..','..........','..........']},
+  diamond:{pal:{c:'#6cc9dd',C:'#c8f2fa'},rows:[
+    '..........','..cccccc..','.cCcccccC.','cccccccccc','.cccccccc.',
+    '..cccccc..','...cccc...','....cc....','..........','..........']},
+  solar:{pal:{b:'#2b4a9e',l:'#5580e0',g:'#8a8aa0'},rows:[
+    '.bbbbbbbb.','.blblblbb.','.bbbbbbbb.','.blblblbb.','.bbbbbbbb.',
+    '..gg..gg..','...gggg...','....gg....','..........','..........']},
+  pad:{pal:{r:'#d8503c',w:'#e8e4da',c:'#57c8e8',o:'#f0a03a',y:'#f7d75a'},rows:[
+    '....rr....','....ww....','...wwww...','...wccw...','...wwww...',
+    '..wwwwww..','..wrwwrw..','...wwww...','...oooo...','....yy....']},
+  printer:{pal:{g:'#6a6880',d:'#43414f','$':'#57c857',e:'#2f6f38'},rows:[
+    '.gggggggg.','.gddddddg.','.gggggggg.','.gggggggg.','..d....d..',
+    '.gggggggg.','.g$$$$$$g.','.g$e$$e$g.','.g$$$$$$g.','..........']},
+  desal:{pal:{g:'#8a93a8',G:'#5f6880',w:'#3a6fd4',W:'#8fc0f5',d:'#43414f'},rows:[
+    '.gg....gg.','.gWw..wWg.','.gww..wwg.','.gww..wwg.','.gggggggg.',
+    '.GGGGGGGG.','.GdwddwdG.','.GwwwwwwG.','.GGGGGGGG.','..........']},
+  drip:{pal:{d:'#7a5230',p:'#3f8f4f',P:'#8ac650',b:'#57c8e8'},rows:[
+    '.b..b..b..','.p..p..p..','.PppPppPp.','.pppppppp.','.dddddddd.',
+    '.p..p..p..','.PppPppPp.','.pppppppp.','.dddddddd.','..........']},
+  cyber:{pal:{w:'#44507e',d:'#2f3a5e',c:'#57e0c8'},rows:[
+    'c...cc...c','cc..cc..cc','wwwwddwwww','wddwwwwddw','wddwwwwddw',
+    'wwwwccwwww','wwwwccwwww','wwwwwwwwww','dddddddddd','..........']},
+  quantum:{pal:{n:'#f0b429',N:'#f7d75a',o:'#9b6ff0',O:'#c9a5ff'},rows:[
+    '....oo....','..Oo..oO..','.O..NN..O.','.O.NnnN.O.','..ONnnNO..',
+    '.O.NnnN.O.','.O..NN..O.','..Oo..oO..','....oo....','..........']},
+  moon:{pal:{M:'#d8d6e4',m:'#a8a6be',c:'#57c8e8',g:'#56527a',G:'#44406a'},rows:[
+    '....mm....','...mMMm...','..mMMMMm..','.mMMcMMMm.','.mMMMMcMm.',
+    '.mmmmmmmm.','GGgggGgggG','.gG.gG.gG.','GGgggGgggG','..........']},
+  wormhole:{pal:{k:'#2a1c50',p:'#7a4ad4',P:'#b48aff',w:'#c9a5ff'},rows:[
+    '...kkkk...','..kPPPPk..','.kPwwwwPk.','.kPwkkwPk.','kPwkkkkwPk',
+    'kPwkkkkwPk','.kPwkkwPk.','.kPwwwwPk.','..kPPPPk..','...kkkk...']},
+  cursor:{pal:{w:'#f2ead8',e:'#5a5380'},rows:[
+    'ee........','ewe.......','ewwe......','ewwwe.....','ewwwwe....',
+    'ewwwwwe...','ewwwwwwe..','ewwwwwwwe.','eee.eewe..','.....ee...']},
+  chip:{pal:{b:'#2f6f45',c:'#8ac650',g:'#c9a5ff',d:'#1d4a2e'},rows:[
+    '..g....g..','..g....g..','.bbbbbbbb.','.bccccccb.','.bcdbdbcb.',
+    '.bcdbdbcb.','.bccccccb.','.bbbbbbbb.','..g....g..','..........']},
+  trophy:{gold:{y:'#f0b429',Y:'#f7d75a',d:'#a8791a'},lock:{y:'#454066',Y:'#4f4a72',d:'#38335a'},rows:[
+    '.yyyyyyyy.','.yYyyyyYy.','.yyyyyyyy.','..yyyyyy..','...yyyy...',
+    '....yy....','....yy....','...yyyy...','..dddddd..','..........']},
+};
+function spriteCanvas(rows,pal){
+  const h=rows.length,w=rows[0].length;
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  const g=c.getContext('2d');
+  rows.forEach((r,y)=>{for(let x=0;x<w;x++){const ch=r[x];if(ch!=='.'){g.fillStyle=pal[ch];g.fillRect(x,y,1,1);}}});
+  return c;
+}
+
+/* ============ pixel star generator (Star of David) ============ */
+function makeStar(w,pal){
+  pal=Object.assign({mid:'#2f56c0',light:'#5d84ee',line:'#131f56',outer:'#f2ead8',shine:'#8fb1ff',shade:'#25449e'},pal||{});
+  const h=Math.round(w*37/33),k=(w-1)/2,yb=Math.round((h-1)*8/9);
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  const g=c.getContext('2d');
+  const up=(x,y)=>{const hw=k*y/yb;return y>=0&&y<=yb&&x>=k-hw&&x<=k+hw;};
+  const dn=(x,y)=>up(x,h-1-y);
+  const u=(x,y)=>x>=0&&y>=0&&x<w&&y<h&&(up(x,y)||dn(x,y));
+  g.fillStyle=pal.outer;   // white pixel outline (flag style)
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    if(u(x,y))continue;
+    if(u(x+1,y)||u(x-1,y)||u(x,y+1)||u(x,y-1))g.fillRect(x,y,1,1);
+  }
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){ // fill, lighter where triangles overlap
+    if(!u(x,y))continue;
+    g.fillStyle=(up(x,y)&&dn(x,y))?pal.light:pal.mid;
+    g.fillRect(x,y,1,1);
+  }
+  g.fillStyle=pal.line;    // dark inner outline
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    if(!u(x,y))continue;
+    if(!u(x+1,y)||!u(x-1,y)||!u(x,y+1)||!u(x,y-1))g.fillRect(x,y,1,1);
+  }
+  if(w>=20){               // bevel shine top-left, shade bottom-right
+    g.fillStyle=pal.shine;
+    for(let y=2;y<=8;y++){const x=Math.round(k-(k*y)/yb);if(u(x,y))g.fillRect(x,y,1,1);}
+    for(let y=5;y<=15;y++){const x=Math.round(y/2-2);if(u(x,y))g.fillRect(x,y,1,1);}
+    g.fillStyle=pal.shade;
+    for(let y=26;y<=33;y++){const x=Math.round(k+(k*y)/yb);if(u(x,y))g.fillRect(x,y,1,1);}
+  }
+  return c;
+}
+function drawFace(g,variant){
+  const ink='#131f56';
+  g.fillStyle=ink;
+  const smile=()=>{g.fillRect(13,20,1,1);g.fillRect(18,20,1,1);g.fillRect(14,21,4,1);};
+  if(variant==='blink'){g.fillRect(10,15,2,1);g.fillRect(21,15,2,1);smile();}
+  else if(variant==='happy'){
+    g.fillRect(10,16,1,1);g.fillRect(11,15,1,1);
+    g.fillRect(22,16,1,1);g.fillRect(21,15,1,1);
+    g.fillRect(13,20,6,1);g.fillRect(14,21,4,1);
+  }else{
+    g.fillRect(10,14,2,3);g.fillRect(21,14,2,3);
+    g.fillStyle='#cfe0ff';g.fillRect(10,14,1,1);g.fillRect(21,14,1,1);
+    g.fillStyle=ink;smile();
+  }
+}
+
+/* cached sprite canvases */
+const SPRCACHE={};
+function getSpr(key){
+  if(SPRCACHE[key])return SPRCACHE[key];
+  let c;
+  if(key==='star')c=makeStar(11);
+  else if(key==='goldstar')c=makeStar(13,{mid:'#e8a020',light:'#f7d060',line:'#7a4a08',outer:'#fff1c8',shine:'#ffe9a0',shade:'#c07c10'});
+  else if(key==='trophyG')c=spriteCanvas(SPRITES.trophy.rows,SPRITES.trophy.gold);
+  else if(key==='trophyL')c=spriteCanvas(SPRITES.trophy.rows,SPRITES.trophy.lock);
+  else c=spriteCanvas(SPRITES[key].rows,SPRITES[key].pal);
+  return SPRCACHE[key]=c;
+}
+function spr(key,scale){
+  scale=scale||3;
+  const src=getSpr(key);
+  const c=document.createElement('canvas');c.width=src.width;c.height=src.height;
+  c.getContext('2d').drawImage(src,0,0);
+  c.className='pix icon';
+  c.style.width=(src.width*scale)+'px';c.style.height=(src.height*scale)+'px';
+  return c;
+}
+
+/* ============ state / save ============ */
+const KEY='israel_clicker_v1';
+const state={credits:0,total:0,clicks:0,b:{},u:[],a:[],sound:true,last:Date.now()};
+const cache={sps:0,click:1,eachMult:1,achMult:1};
+function recalc(){
+  let clickAdd=0,clickMult=1,cpsMult=1,spsPct=0;
+  state.u.forEach(id=>{const u=UPGRADES.find(x=>x.id===id);if(!u)return;
+    clickAdd+=u.clickAdd||0;clickMult*=u.clickMult||1;cpsMult*=u.cpsMult||1;spsPct+=u.spsPct||0;});
+  cache.achMult=1+0.02*state.a.length;
+  cache.eachMult=cpsMult*cache.achMult;
+  let raw=0;BUILDINGS.forEach(b=>raw+=b.sps*(state.b[b.id]||0));
+  cache.sps=raw*cache.eachMult;
+  cache.click=(1+clickAdd)*clickMult*cache.achMult+spsPct*cache.sps;
+}
+function save(silent){
+  state.last=Date.now();
+  try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}
+  $('lastSave').textContent='LAST SAVE: '+new Date().toLocaleTimeString();
+  if(!silent)toast('GAME SAVED','progress written to local storage.');
+}
+function load(){
+  try{
+    const raw=localStorage.getItem(KEY);if(!raw)return false;
+    const d=JSON.parse(raw);if(!d||typeof d!=='object')return false;
+    Object.assign(state,{credits:0,total:0,clicks:0,b:{},u:[],a:[],sound:true,last:Date.now()},d);
+    state.b=d.b||{};state.u=d.u||[];state.a=d.a||[];
+    return true;
+  }catch(e){return false;}
+}
+
+/* ============ economy ============ */
+let buyAmt=1;
+const bulkCost=(b,n)=>{const r=1.15,c0=b.base*Math.pow(r,state.b[b.id]||0);return Math.ceil(c0*(Math.pow(r,n)-1)/(r-1));};
+function maxAff(b){const r=1.15,c0=b.base*Math.pow(r,state.b[b.id]||0);
+  return Math.max(0,Math.floor(Math.log(state.credits*(r-1)/c0+1)/Math.log(r)));}
+
+/* ============ audio ============ */
+let AC=null;
+function initAudio(){if(!AC){try{AC=new(window.AudioContext||window.webkitAudioContext)();}catch(e){}}
+  if(AC&&AC.state==='suspended')AC.resume();}
+document.addEventListener('pointerdown',initAudio);
+function tone(f,d,type,v,delay){
+  if(!state.sound||!AC)return;
+  d=d||0.07;type=type||'square';v=v||0.08;delay=delay||0;
+  const t=AC.currentTime+delay,o=AC.createOscillator(),g=AC.createGain();
+  o.type=type;o.frequency.value=f;
+  g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(0.0008,t+d);
+  o.connect(g);g.connect(AC.destination);o.start(t);o.stop(t+d+0.03);
+}
+const sndClick=()=>tone(500+Math.random()*220,0.045,'square',0.05);
+const sndBuy =()=>{tone(392,.07);tone(523,.07,'square',.08,.06);tone(659,.1,'square',.08,.12);};
+const sndUpg =()=>{tone(523,.06);tone(659,.06,'square',.09,.05);tone(880,.12,'square',.09,.1);};
+const sndAch =()=>{tone(523,.09);tone(659,.09,'square',.1,.09);tone(784,.1,'square',.1,.18);tone(1046,.22,'square',.1,.27);};
+const sndErr =()=>tone(130,.13,'sawtooth',.07);
+const sndGold=()=>{tone(784,.08,'square',.1);tone(988,.08,'square',.1,.07);tone(1319,.16,'square',.1,.14);};
+
+/* ============ toasts / modal ============ */
+const toastsEl=$('toasts');
+function toast(t,msg){
+  const d=document.createElement('div');d.className='toast px3';
+  d.innerHTML='<b>'+t+'</b><p>'+msg+'</p>';
+  toastsEl.prepend(d);
+  setTimeout(()=>{d.classList.add('out');setTimeout(()=>d.remove(),320);},4200);
+  while(toastsEl.children.length>4)toastsEl.lastChild.remove();
+}
+
+/* ============ star stage ============ */
+const stage=$('stage'),starCv=$('star'),sctx=starCv.getContext('2d'),fl=$('fl'),
+      starWrap=$('starWrap'),bubble=$('bubble');
+const baseStar=makeStar(33);
+let press=0,blink=0,nextBlink=2000+Math.random()*2500,quipT=null;
+function drawStarFrame(t,dtms){
+  press=Math.max(0,press-dtms);
+  blink=Math.max(0,blink-dtms);
+  if(t>nextBlink){blink=130;nextBlink=t+2200+Math.random()*3200;}
+  const p=press/140;
+  const variant=p>0.35?'happy':(blink>0?'blink':'open');
+  sctx.clearRect(0,0,33,37);
+  sctx.drawImage(baseStar,0,0);
+  drawFace(sctx,variant);
+  const bob=Math.sin(t/720)*3;
+  starCv.style.transform='translateY('+bob.toFixed(1)+'px) scale('+(1+0.12*p).toFixed(3)+','+(1-0.15*p).toFixed(3)+')';
+}
+function floatText(txt,x,y){
+  while(fl.children.length>55)fl.firstChild.remove();
+  const s=document.createElement('span');s.className='ftext';s.textContent=txt;
+  s.style.left=x+'px';s.style.top=y+'px';
+  s.style.setProperty('--dx',(Math.random()*44-22)+'px');
+  fl.appendChild(s);s.addEventListener('animationend',()=>s.remove());
+}
+function spark(x,y){
+  if(fl.children.length>55)return;
+  const s=document.createElement('span');s.className='spark';
+  s.style.left=x+'px';s.style.top=y+'px';
+  s.style.animationDuration=(1+Math.random()*0.8)+'s';
+  fl.appendChild(s);s.addEventListener('animationend',()=>s.remove());
+}
+function quip(){
+  bubble.textContent=QUIPS[(Math.random()*QUIPS.length)|0];
+  bubble.classList.add('on');
+  clearTimeout(quipT);quipT=setTimeout(()=>bubble.classList.remove('on'),1600);
+}
+function popCounter(){const c=$('credits');c.classList.remove('pop');void c.offsetWidth;c.classList.add('pop');}
+function doClick(x,y){
+  const gain=cache.click;
+  state.credits+=gain;state.total+=gain;state.clicks++;
+  press=140;sndClick();
+  floatText('+'+fmt(gain),x,y);
+  for(let i=0;i<4;i++)spark(x+(Math.random()*56-28),y+(Math.random()*40-20));
+  popCounter();
+  if(state.clicks%25===0)quip();
+}
+starCv.addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  const r=stage.getBoundingClientRect();
+  doClick(e.clientX-r.left,e.clientY-r.top);
+});
+starCv.addEventListener('contextmenu',e=>e.preventDefault());
+starCv.addEventListener('keydown',e=>{
+  if(e.code==='Space'||e.code==='Enter'){
+    e.preventDefault();
+    const r=stage.getBoundingClientRect(),sr=starWrap.getBoundingClientRect();
+    doClick(sr.left-r.left+sr.width/2,sr.top-r.top+sr.height/2);
+  }
+});
+
+/* ============ shop ============ */
+const listEl=$('list'),infoEl=$('info'),buyBar=$('buyBar');
+let curTab='business';
+const rowRefs=[];
+function setInfo(t){infoEl.innerHTML=t;}
+function defaultInfo(){
+  return 'TOTAL EARNED <b>'+fmt(state.total)+'</b> &middot; CLICKS <b>'+fmt(state.clicks)+
+         '</b> &middot; AWARD BONUS <b>+'+Math.round((cache.achMult-1)*100)+'%</b><br>progress autosaves every 20s &mdash; hover any item to inspect it.';
+}
+function bInfo(b){
+  const owned=state.b[b.id]||0,each=b.sps*cache.eachMult,tot=each*owned;
+  const pct=cache.sps>0?Math.round(100*tot/cache.sps):0;
+  return '<b>'+b.name+'</b> — '+b.flavor+'<br>each produces '+fmt(each)+'/s &middot; your '+owned+' produce '+fmt(tot)+'/s ('+pct+'% of income)';
+}
+const uInfo=u=>'<b>'+u.name+'</b> — '+u.desc+'<br>one-time purchase &middot; permanent';
+function aInfo(a){
+  const got=state.a.includes(a.id);
+  return '<b>'+(got?a.name:'???')+'</b> — '+a.desc+'<br>'+(got?'unlocked: income +2%':'locked — keep grinding');
+}
+function renderBusiness(){
+  listEl.innerHTML='';rowRefs.length=0;
+  BUILDINGS.forEach(b=>{
+    const row=document.createElement('div');row.className='row px3';
+    row.appendChild(spr(b.id,3));
+    const meta=document.createElement('div');meta.className='meta';
+    meta.innerHTML='<div class="r1"><span class="nm">'+b.name+'</span><span class="own"></span></div>'+
+                   '<div class="r2"><span class="cost"></span><span class="each"></span></div>';
+    row.appendChild(meta);
+    row._b=b;
+    row._e={own:meta.querySelector('.own'),cost:meta.querySelector('.cost'),each:meta.querySelector('.each')};
+    listEl.appendChild(row);rowRefs.push(row);
+  });
+  refreshBusiness();
+}
+function refreshBusiness(){
+  rowRefs.forEach(row=>{
+    const b=row._b,e=row._e,owned=state.b[b.id]||0;
+    const n=buyAmt==='max'?Math.max(1,maxAff(b)):buyAmt;
+    const cost=bulkCost(b,n);
+    const ok=buyAmt==='max'?maxAff(b)>=1:state.credits>=cost;
+    e.own.textContent=owned?('\u00d7'+owned):'';
+    e.cost.textContent=fmt(cost)+(buyAmt==='max'&&n>1?(' ('+n+')'):'');
+    e.each.textContent='+'+fmt(b.sps*cache.eachMult)+'/s each';
+    row.classList.toggle('ok',ok);
+  });
+}
+function renderUpgrades(){
+  listEl.innerHTML='';
+  const avail=UPGRADES.filter(u=>!state.u.includes(u.id)).sort((a,b)=>a.cost-b.cost);
+  if(!avail.length){listEl.innerHTML='<div class="empty">SOLD OUT.<br>you bought every upgrade in the country.</div>';}
+  avail.forEach(u=>{
+    const row=document.createElement('div');row.className='row px3 upg';
+    row.appendChild(spr(u.icon,3));
+    const meta=document.createElement('div');meta.className='meta';
+    meta.innerHTML='<div class="r1"><span class="nm">'+u.name+'</span></div><div class="r2"><span class="cost">'+fmt(u.cost)+'</span></div>';
+    row.appendChild(meta);row._u=u;listEl.appendChild(row);
+  });
+  refreshUpgrades();
+}
+function refreshUpgrades(){
+  let any=false;
+  listEl.querySelectorAll('.row.upg').forEach(row=>{
+    const ok=state.credits>=row._u.cost;
+    row.classList.toggle('ok',ok);any=any||ok;
+  });
+  $('tabUpg').classList.toggle('alert',any);
+}
+function renderAwards(){
+  listEl.innerHTML='';
+  const head=document.createElement('div');head.className='ahead';
+  head.innerHTML='EACH AWARD: <b>+2% INCOME</b> &middot; <b>'+state.a.length+'/'+ACHS.length+'</b> COLLECTED';
+  listEl.appendChild(head);
+  const grid=document.createElement('div');grid.className='agrid';
+  ACHS.forEach(a=>{
+    const got=state.a.includes(a.id);
+    const d=document.createElement('div');d.className='badge px3'+(got?' got':'');
+    d.appendChild(spr(got?'trophyG':'trophyL',4));
+    const s=document.createElement('span');s.textContent=got?a.name:'???';
+    d.appendChild(s);d._a=a;grid.appendChild(d);
+  });
+  listEl.appendChild(grid);
+}
+function deny(row){row.classList.add('deny');setTimeout(()=>row.classList.remove('deny'),260);}
+function buyBuilding(row,b){
+  const n=buyAmt==='max'?maxAff(b):buyAmt;
+  if(n<1){sndErr();deny(row);return;}
+  const cost=bulkCost(b,n);
+  if(state.credits<cost){sndErr();deny(row);return;}
+  state.credits-=cost;state.b[b.id]=(state.b[b.id]||0)+n;
+  recalc();sndBuy();
+  row.classList.add('bought');setTimeout(()=>row.classList.remove('bought'),360);
+  refreshBusiness();checkAchs();
+}
+function buyUpgrade(row,u){
+  if(state.credits<u.cost){sndErr();deny(row);return;}
+  state.credits-=cost0(u);state.u.push(u.id);
+  recalc();sndUpg();toast('UPGRADE BOUGHT',u.name);
+  renderUpgrades();checkAchs();
+}
+const cost0=u=>u.cost;
+listEl.addEventListener('click',e=>{
+  const row=e.target.closest('.row,.badge');if(!row)return;
+  if(row._b)buyBuilding(row,row._b);
+  else if(row._u)buyUpgrade(row,row._u);
+});
+listEl.addEventListener('mouseover',e=>{
+  const row=e.target.closest('.row,.badge');if(!row)return;
+  if(row._b)setInfo(bInfo(row._b));
+  else if(row._u)setInfo(uInfo(row._u));
+  else if(row._a)setInfo(aInfo(row._a));
+});
+listEl.addEventListener('mouseleave',()=>setInfo(defaultInfo()));
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>setTab(t.dataset.t)));
+function setTab(t){
+  curTab=t;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  buyBar.style.display=t==='business'?'flex':'none';
+  if(t==='business')renderBusiness();
+  else if(t==='upgrades')renderUpgrades();
+  else renderAwards();
+  setInfo(defaultInfo());
+}
+document.querySelectorAll('.amt').forEach(a=>a.addEventListener('click',()=>{
+  buyAmt=a.dataset.a==='max'?'max':+a.dataset.a;
+  document.querySelectorAll('.amt').forEach(x=>x.classList.toggle('on',x===a));
+  refreshBusiness();
+}));
+
+/* ============ achievements ============ */
+function checkAchs(){
+  ACHS.forEach(a=>{
+    if(!state.a.includes(a.id)&&a.cond()){
+      state.a.push(a.id);recalc();sndAch();
+      toast('AWARD UNLOCKED','<b>'+a.name+'</b> — income +2%');
+      if(curTab==='awards')renderAwards();
+    }
+  });
+}
+
+/* ============ golden star event ============ */
+let nextGold=performance.now()+70000;
+function spawnGold(){
+  const el=document.createElement('div');el.className='goldstar';
+  el.appendChild(spr('goldstar',3.4));
+  const y0=70+Math.random()*(innerHeight-260),y1=70+Math.random()*(innerHeight-260);
+  const L=Math.random()<0.5,x0=L?-60:innerWidth+60,x1=L?innerWidth+60:-60;
+  el.addEventListener('pointerdown',e=>{
+    e.stopPropagation();
+    const r=Math.max(25,cache.sps*60+state.credits*0.1);
+    state.credits+=r;state.total+=r;popCounter();sndGold();
+    toast('GOLDEN STAR!','+'+fmt(r)+' social credit. mazal tov!');
+    el.remove();
+  });
+  document.body.appendChild(el);
+  el.animate(
+    [{transform:'translate('+x0+'px,'+y0+'px)'},
+     {transform:'translate('+((x0+x1)/2)+'px,'+((y0+y1)/2-90)+'px)',offset:.5},
+     {transform:'translate('+x1+'px,'+y1+'px)'}],
+    {duration:9000,easing:'linear'}
+  ).onfinish=()=>el.remove();
+}
+
+/* ============ skyline / header star / ticker / favicon ============ */
+(function genSkyline(){
+  const c=document.createElement('canvas');c.width=140;c.height=28;
+  const g=c.getContext('2d');let x=2;
+  while(x<132){
+    const bw=7+((Math.random()*10)|0),bh=7+((Math.random()*15)|0);
+    g.fillStyle='#211c45';g.fillRect(x,28-bh,bw,bh);
+    g.fillStyle='#2e2766';
+    for(let wy=28-bh+2;wy<26;wy+=3)
+      for(let wx=x+2;wx<x+bw-1;wx+=3)
+        if(Math.random()<.35)g.fillRect(wx,wy,1,1);
+    if(Math.random()<.25){
+      const mx=x+((bw/2)|0);
+      g.fillStyle='#211c45';g.fillRect(mx,28-bh-4,1,4);
+      g.fillStyle='#d8503c';g.fillRect(mx,28-bh-5,1,1);
+    }
+    x+=bw+1+((Math.random()*3)|0);
+  }
+  $('skyline').style.backgroundImage='url('+c.toDataURL()+')';
+})();
+(function(){
+  const mini=makeStar(11);mini.className='pix';
+  mini.style.width='33px';mini.style.height='36px';
+  $('headStar').appendChild(mini);
+  const fav=document.createElement('link');fav.rel='icon';fav.href=mini.toDataURL();
+  document.head.appendChild(fav);
+})();
+(function(){
+  const txt=NEWS.join('   ///   ')+'   ///   ';
+  const tin=$('tin');tin.textContent=txt+txt;
+  tin.style.animationDuration=Math.max(35,txt.length/5)+'s';
+})();
+
+/* ============ buttons ============ */
+let wiping=false; /* suppresses autosave during a hard reset */
+ $('btnSave').addEventListener('click',()=>save(false));
+ $('btnReset').addEventListener('click',()=>$('overlay').classList.add('open'));
+ $('mNo').addEventListener('click',()=>$('overlay').classList.remove('open'));
+ $('mYes').addEventListener('click',()=>{
+  wiping=true;
+  try{localStorage.removeItem(KEY);}catch(e){}
+  location.reload();
+});
+ $('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))$('overlay').classList.remove('open');});
+ $('btnSound').addEventListener('click',()=>{
+  state.sound=!state.sound;
+  $('btnSound').textContent='SOUND:'+(state.sound?'ON':'OFF');
+});
+window.addEventListener('beforeunload',()=>{if(!wiping)save(true);});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&!wiping)save(true);});
+
+/* ============ main loop ============ */
+const announced=new Set();
+let lastT=performance.now(),uiT=0,achT=0,saveT=0;
+function slowUpdate(){
+  if(curTab==='business')refreshBusiness();
+  else if(curTab==='upgrades')refreshUpgrades();
+  $('cPerClick').textContent=fmt(cache.click);
+  $('cPerSec').textContent=fmt(cache.sps);
+  $('cClicks').textContent=fmt(state.clicks);
+  $('cAch').textContent='+'+Math.round((cache.achMult-1)*100)+'%';
+  BUILDINGS.forEach(b=>{
+    const owned=state.b[b.id]||0;
+    if(!announced.has(b.id)&&owned===0&&state.total>10&&
+       state.credits>=b.base*0.5&&state.credits<b.base*8){
+      announced.add(b.id);
+      toast('NEW IN THE SHOP',b.name+' is now available.');
+    }
+  });
+}
+function loop(t){
+  const dtms=t-lastT;lastT=t;
+  const dt=Math.min(dtms/1000,3600);
+  const g=cache.sps*dt;
+  if(g>0){state.credits+=g;state.total+=g;}
+  $('credits').textContent=fmt(state.credits);
+  $('cpsLine').textContent=fmt(cache.sps)+' / SEC';
+  drawStarFrame(t,dtms);
+  uiT+=dtms;if(uiT>=100){uiT=0;slowUpdate();}
+  achT+=dtms;if(achT>=1000){
+    achT=0;checkAchs();
+    if(Math.random()<0.5){
+      const sr=starWrap.getBoundingClientRect(),r=stage.getBoundingClientRect();
+      spark(sr.left-r.left+Math.random()*sr.width,sr.top-r.top+Math.random()*sr.height*0.6);
+    }
+  }
+  if(t>nextGold){spawnGold();nextGold=t+(60+Math.random()*80)*1000;}
+  saveT+=dtms;if(saveT>=20000){saveT=0;save(true);}
+  requestAnimationFrame(loop);
+}
+
+/* ============ init ============ */
+const had=load();
+recalc();
+if(had&&state.last){
+  const away=(Date.now()-state.last)/1000;
+  if(away>90&&cache.sps>0){
+    const cap=Math.min(away,8*3600),gain=cache.sps*cap*0.5;
+    state.credits+=gain;state.total+=gain;
+    setTimeout(()=>toast('WELCOME BACK','while you were away ('+fmtTime(cap)+') your empire earned <b>'+fmt(gain)+'</b> social credit.'),700);
+  }
+}
+ $('btnSound').textContent='SOUND:'+(state.sound?'ON':'OFF');
+setTab('business');
+setInfo(defaultInfo());
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
