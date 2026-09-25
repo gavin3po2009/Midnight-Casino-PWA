@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Election Simulator</title>
+<style>
+:root{--ink:#1b1340;--paper:#fff3d6;--red:#ff4b3e;--sun:#ffc935;--teal:#1fb5a3;--mut:#6d6488;--disp:Impact,"Arial Black",Haettenschweiler,sans-serif}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;color:var(--ink);font:15px/1.45 "Trebuchet MS",Verdana,sans-serif;min-height:100vh;background:radial-gradient(#ffffff17 1.5px,transparent 1.7px) 0 0/16px 16px,linear-gradient(180deg,#2c1f78,#150e38 75%) fixed;background-color:#150e38}
+main{max-width:960px;margin:auto;padding:0 14px 40px}
+.flags{height:16px;margin:0 -14px 12px;background:repeating-linear-gradient(90deg,var(--red) 0 28px,var(--paper) 28px 56px,#3a5bff 56px 84px);border-bottom:4px solid var(--ink)}
+h2{font:400 1.35em var(--disp);letter-spacing:.03em;display:inline-block;background:var(--ink);color:var(--sun);padding:1px 12px;margin:-25px 0 10px -6px;transform:rotate(-1.5deg);border-radius:4px}
+.card{background:var(--paper);border:3px solid var(--ink);border-radius:14px;box-shadow:6px 6px 0 var(--red);padding:22px 14px 14px;margin:28px 6px 0 0;position:relative}
+.card:nth-of-type(3n+2){box-shadow:6px 6px 0 var(--sun)}.card:nth-of-type(3n){box-shadow:6px 6px 0 var(--teal)}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1 1 120px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px}
+.stat{background:var(--ink);color:var(--paper);border:3px solid var(--sun);border-radius:10px;padding:6px 10px;box-shadow:3px 3px 0 var(--red)}
+.stat b{display:block;font:400 1.7em/1.1 var(--disp);color:var(--sun);letter-spacing:.02em}.stat small{color:#b9b0e0}.hot{background:var(--red);animation:pulse 1s infinite alternate}.hot b,.hot small{color:#fff}
+button{font:inherit;color:var(--ink);background:#fff;border:3px solid var(--ink);border-radius:12px;padding:9px 11px;cursor:pointer;text-align:left;box-shadow:3px 3px 0 var(--ink);transition:transform .08s,box-shadow .08s,background .15s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+button:hover:not(:disabled){transform:translate(-1px,-1px);box-shadow:5px 5px 0 var(--ink);background:#fffbe8}button:active:not(:disabled){transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
+button:disabled{opacity:.5;cursor:not-allowed;background:repeating-linear-gradient(45deg,#eee 0 6px,#ddd 6px 12px)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px dashed var(--sun);outline-offset:3px}
+#m button:focus-visible,.card button:focus-visible,.card input:focus-visible,.card select:focus-visible{outline-color:var(--ink)}
+button small{display:block;color:var(--mut);font-size:.82em;margin-top:2px}
+.dirty{border-left:12px solid var(--red)}.clean{border-left:12px solid var(--teal)}
+.cancel{background:transparent;box-shadow:none;color:var(--mut);text-align:center;border-style:dashed}.cancel:hover:not(:disabled){background:#fffbe8;box-shadow:none;transform:none}
+.need .cost{background:#fff;color:var(--red);border-color:var(--red)}
+.reason{color:var(--red);font-weight:700}.ok{color:#0b8577;font-weight:700}
+.cost{float:right;background:var(--sun);border:2px solid var(--ink);border-radius:20px;padding:0 8px;font-weight:700;font-size:.85em;margin-left:6px}
+.go{background:var(--red);color:#fff;font:400 1.3em var(--disp);letter-spacing:.04em;text-align:center;text-shadow:2px 2px 0 var(--ink)}.go:hover:not(:disabled){background:#ff6a5e}
+.bar{position:relative;display:flex;height:20px;border:3px solid var(--ink);border-radius:10px;overflow:hidden;background:#fff}.bar i{display:block;flex:none;transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.me{background:repeating-linear-gradient(-45deg,var(--teal) 0 7px,#159a8a 7px 14px)}.op{background:repeating-linear-gradient(-45deg,var(--red) 0 7px,#e23a2d 7px 14px)}.und{background:#d8cfee}
+.mid::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:3px;background:var(--ink)}
+.me-t{color:#0b8577}.op-t{color:#d6301f}.hi{color:#a3540a}.mut{color:var(--mut);font-size:.85em}
+.bloc{margin:10px 0}.bloc .t{display:flex;justify-content:space-between;gap:8px;font-size:.9em;margin-bottom:2px}
+.vs{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.vs>div{flex:1;min-width:0;overflow-wrap:anywhere}.vs .r{text-align:right}
+.big{font:400 3.4em/1 var(--disp);display:block}.vsb{flex:0 0 46px!important;height:46px;background:var(--sun);border:3px solid var(--ink);border-radius:50%;display:grid;place-items:center;font:400 1.1em var(--disp)}
+.dl{font:700 .8rem "Trebuchet MS",sans-serif;display:block;margin-top:2px}.up{color:#0b8577}.dn{color:#d6301f}.fl{color:var(--mut)}
+.tick{display:flex;gap:10px;align-items:center;background:var(--ink);color:var(--paper);border:3px solid var(--sun);border-radius:8px;padding:5px 10px;margin:0 6px 4px 0;min-width:0}
+.tick b{background:var(--red);color:#fff;padding:0 8px;border-radius:4px;font:400 1em var(--disp);letter-spacing:.05em;white-space:nowrap}.tick span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.tick.new span{animation:tk .6s}
+.poster{background:var(--sun);border:4px solid var(--ink);box-shadow:8px 8px 0 var(--red);text-align:center;padding:14px 10px;transform:rotate(-1.5deg);margin:14px 8px 8px;animation:pop .5s}
+.poster div{font:400 clamp(2.4em,10vw,4.6em)/1 var(--disp);text-shadow:3px 3px 0 #fff;overflow-wrap:anywhere}#pn{color:var(--red)}
+#m{position:fixed;inset:0;background:#0009;display:none;align-items:center;justify-content:center;padding:14px;z-index:9}
+#m.on{display:flex}
+#m>div{background:var(--paper);border:4px solid var(--ink);box-shadow:8px 8px 0 var(--red);border-radius:16px;padding:20px 18px;max-width:470px;width:100%;display:flex;flex-direction:column;gap:9px;max-height:90vh;overflow:auto;animation:pop .25s}
+#m h2{margin:0 0 4px;transform:none;align-self:flex-start}#m p{margin:.2em 0}
+#feed p{margin:.3em 0;font-size:.9em;border-left:4px solid var(--sun);padding-left:8px}
+#feed p:first-of-type{border-left-color:var(--red)}
+input,select{font:inherit;padding:9px;border-radius:10px;border:3px solid var(--ink);background:#fff;color:var(--ink);width:100%;margin-bottom:8px}
+label.lb{display:block;font-weight:700;font-size:.85em;margin:2px 0 3px}
+.row-r{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:2px dashed #c9b98f;font-size:1.05em}
+.rev{opacity:0;animation:rev .5s both}
+.stamp{display:inline-block;font:400 2.6em var(--disp);border:6px solid;padding:0 16px;border-radius:8px;margin:14px 0;opacity:0;animation:slam .5s both}.stamp.w{color:#0b8577}.stamp.l{color:#d6301f}
+.foot{text-align:center;margin-top:22px;color:#b9b0e0;font-size:.85em}.foot button{margin-bottom:8px}
+.link{background:none;border:0;box-shadow:none;color:var(--mut);text-decoration:underline;padding:0;font-size:.85em}.link:hover:not(:disabled){background:none;box-shadow:none;transform:none;color:var(--ink)}
+#toast{position:fixed;left:50%;bottom:16px;transform:translate(-50%,24px);opacity:0;transition:opacity .3s,transform .3s;background:var(--ink);color:var(--paper);border:3px solid var(--sun);border-radius:12px;padding:8px 14px;width:max-content;max-width:min(460px,calc(100% - 32px));z-index:10;pointer-events:none;box-shadow:4px 4px 0 var(--red);font-size:.92em}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+#toast div+div{border-top:1px dashed #ffffff33;margin-top:4px;padding-top:4px}
+#toast b{color:var(--sun)}
+@keyframes pop{from{transform:scale(.92) rotate(-1deg);opacity:0}}@keyframes rev{from{transform:translateX(-24px)}to{opacity:1}}@keyframes slam{from{transform:rotate(-8deg) scale(3)}to{transform:rotate(-8deg);opacity:1}}@keyframes pulse{to{box-shadow:3px 3px 0 var(--sun)}}@keyframes tk{from{color:var(--sun);transform:translateX(-10px)}}
+@media(max-width:520px){.big{font-size:2.6em}h2{font-size:1.2em}}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01s!important;animation-delay:0s!important;transition:none!important}}
+</style></head><body>
+<main id="app"></main><div id="m" role="dialog" aria-modal="true"><div></div></div><div id="toast" role="status" aria-live="polite"></div>
+<script>
+const $=s=>document.querySelector(s),R=(a,b)=>a+Math.random()*(b-a),cl=(v,a=0,b=100)=>Math.max(a,Math.min(b,v)),pick=a=>a[Math.random()*a.length|0];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const RM=matchMedia('(prefers-reduced-motion: reduce)');
+const B=[['👷 Workers',.24],['🏡 Suburbs',.26],['🎧 Youth',.18],['🧓 Seniors',.20],['💼 Business',.12]];
+const BGS={tycoon:['💎 Billionaire','$60k start, Trust 40',{cash:60,rep:40}],charm:['😎 Charmer','Rallies 30% stronger',{cash:30,rep:55}],ins:['🏛️ Insider','Donors give 30% more',{cash:30,rep:50}],act:['✊ Activist','Trust 70, only $18k',{cash:18,rep:70}]};
+const OPP=['Sen. Victor Crane','Gov. Diane Holloway','Mayor Rex Duvall','Sen. Marge Pennington'];
+const PL=['rally','attack','ads','smear','dark'],PLN={rally:'a big rally',attack:'an attack ad',ads:'a TV ad blitz',smear:'a smear campaign',dark:'a quiet town-hall tour'};
+let S=null,screen='menu',fresh=[],lastTick='';
+
+/* ---------- state helpers ---------- */
+const log=t=>{S.log.unshift(`<b>W${S.wk}</b> ${t}`);S.log=S.log.slice(0,12);fresh.push(t)};
+const chk=()=>{S.rep=cl(S.rep);S.orep=cl(S.orep);S.heat=cl(S.heat);S.cash=Math.max(0,S.cash)};
+const gain=(i,d)=>{const b=S.blocs[i];b.me=cl(b.me+d);const o=b.me+b.op-100;if(o>0)b.op=Math.max(0,b.op-o)};
+const hit=(i,d)=>{const b=S.blocs[i];b.op=cl(b.op-d)};
+const ogain=(i,d)=>{const b=S.blocs[i];b.op=cl(b.op+d);const o=b.me+b.op-100;if(o>0)b.me=Math.max(0,b.me-o)};
+const lose=(i,d)=>{const b=S.blocs[i];b.me=cl(b.me-d)};
+const all=(f,g)=>B.forEach((_,i)=>f(i,g()));
+const m=()=>.6+S.rep/125;
+const tot=()=>{let a=0,o=0;S.blocs.forEach((b,i)=>{a+=B[i][1]*b.me;o+=B[i][1]*b.op});return[a,o]};
+
+// Donors: [name, $k, favor text, side effect]
+const D=[
+['🛢️ Big Oil Barry',25,'Youth −5, Trust −3',()=>{lose(2,5);S.rep-=3}],
+['🪙 Crypto Chad',18,'Scandal Risk +8, Seniors −3',()=>{S.heat+=8;lose(3,3)}],
+['🏭 Union Ursula',15,'Workers +3, Business −4',()=>{gain(0,3);lose(4,4)}],
+['💊 Pharma Pete',30,'Trust −6, Scandal Risk +5',()=>{S.rep-=6;S.heat+=5}],
+['💻 Tech Tina',20,'Workers −3, Youth +2',()=>{lose(0,3);gain(2,2)}],
+['👵 Grandma Gloria',6,'Squeaky clean, Trust +3',()=>{S.rep+=3}]];
+const donorGift=d=>Math.round(d[1]*(S.bg=='ins'?1.3:1));
+
+// Actions: [name, cost $k, target(0 none,1 bloc,2 donor), desc, fn, available?]
+const A=[
+['🎤 Rally',2,1,'Fire up one bloc. Cheap and honest.',i=>{gain(i,R(3,5)*m()*(S.up.field?1.4:1)*(S.bg=='charm'?1.3:1));S.rep+=1;log(`Your rally wins over ${B[i][0]}.`)}],
+['📺 Feel-Good Ad',8,0,'Small boost in every bloc.',()=>{all(gain,()=>R(1,2)*m()*(S.up.data?1.4:1));log('Your sunny ad airs nationwide.')}],
+['💥 Attack Ad',8,1,'Hit your rival in one bloc. 30% backfire.',i=>{hit(i,R(4,7));S.orep-=3;S.heat+=4;if(Math.random()<.3){S.rep-=5;lose(i,2);log(`Attack ad in ${B[i][0]} <b>backfires</b>. Voters hate negativity.`)}else log(`Attack ad rattles ${B[i][0]}.`)}],
+['🤖 Propaganda',5,0,'Bot farms and fake grassroots. Big boost, big Scandal Risk.',()=>{all(gain,()=>R(1.5,3));S.heat+=16;S.prop++;S.rep-=1;log('Thousands of "ordinary citizens" suddenly adore you.')}],
+['🕵️ Oppo Research',3,0,'70% chance to find dirt you can leak later.',()=>{if(Math.random()<.7){S.dirt++;log(`Your team finds <b>dirt</b> on ${S.opp}.`)}else log('Oppo research comes up empty.')}],
+['📰 Leak the Dirt',0,0,'Spend 1 dirt: rival tanks everywhere.',()=>{S.dirt--;all(hit,()=>R(3,5));S.orep-=12;S.heat+=5;log(`The leak lands. ${S.opp} is in damage control.`)},()=>S.dirt>0],
+['⭐ Seek Endorsement',4,1,'Chance rises with Trust. Big win if it lands.',i=>{if(Math.random()<.3+S.rep/200){gain(i,R(6,9));S.rep+=4;log(`A big endorsement lands in ${B[i][0]}!`)}else log('Endorsement talks fall through.')}],
+['🎩 Fundraiser',0,2,'Court a donor for cash. Favors expected.',i=>{const d=D[i],g=donorGift(d);S.cash+=g;S.cd[i]=3;d[3]();log(`${d[0]} wires <b>$${g}k</b>. Favor owed: ${d[2]}.`)},()=>D.some((_,j)=>!(S.cd[j]>0))],
+['💰 Super PAC',15,0,'A "totally independent" group attacks the rival every week. Adds Scandal Risk.',()=>{S.pac=1;log('A shadowy Super PAC is born. Nobody is coordinating. Nobody.')},()=>!S.pac],
+['⚖️ Crisis Manager',6,0,'Fixers and lawyers: −25 Scandal Risk.',()=>{S.heat-=25;log('Fixers make the problems quietly disappear.')},()=>S.heat>0]];
+const DIRTY=[2,3,4,5,8];
+const RSN={5:'Requires dirt — run Oppo Research first',7:'Every donor is cooling off',8:'Already running this campaign',9:'Scandal Risk is already zero'};
+const U=[['field','📋 Field Organizers',12,'Rallies +40%'],['data','📊 Data Team',15,'Ads +40%'],['spin','🎭 Spin Doctor',10,'Scandal Risk −6 every week'],['poll','📡 Pollster',8,'Exact polls + see rival\'s plan']];
+
+// Random events: [title, text, [[choice, fn, cost $k]]]
+const E=[
+['🎙️ Hot Mic','A hot mic catches you mocking a diner owner. It is trending.',[['Apologize',()=>{S.rep+=3;all(lose,()=>1);log('You apologize and the storm passes.')}],['Double down',()=>{if(Math.random()<.5){gain(0,5);log('Your base loves the defiance. Workers +5.')}else{lose(1,6);S.rep-=4;log('Suburbs are appalled.')}}]]],
+['📉 Bad Jobs Report','Unemployment ticks up and every camera wants a reaction.',[['Blame the rival (free)',()=>{gain(0,4);S.orep-=2;S.rep-=2;log('Workers nod along. The fact-checkers do not.')}],['Unveil a jobs plan ($3k)',()=>{gain(4,4);gain(0,2);log('Your jobs plan plays well with Business.')},3]]],
+['🕶️ Whistleblower','A staffer offers real dirt on {o}, for a price.',[['Pay $10k',()=>{S.dirt++;S.heat+=6;log('You buy the file. Ethically murky.')},10],['Report it to authorities',()=>{S.rep+=4;log('You look principled. Nobody expected that.')}]]],
+['😂 Viral Meme','Your face has become a meme overnight.',[['Embrace it',()=>{gain(2,5);lose(3,2);log('Youth are in on the joke. Seniors are confused.')}],['Ignore it',()=>{lose(2,1);S.rep+=1;log('You stay above the noise.')}]]],
+['🌀 Hurricane','A hurricane hits a swing region. All eyes on the response.',[['Visit and help ($4k)',()=>{gain(1,4);S.rep+=3;log('Suburban voters see a leader.')},4],['Stage a photo-op',()=>{gain(1,5);S.heat+=6;if(Math.random()<.4){S.rep-=6;log('Photo-op exposed as staged. Ouch.')}else log('The cameras buy it.')}]]],
+['🌐 Foreign Network','A foreign network offers to boost your posts for free.',[['Accept',()=>{all(gain,()=>2);S.heat+=18;S.prop++;log('Your numbers jump. So does the Scandal Risk.')}],['Refuse',()=>{S.rep+=4;log('You take the high road.')}]]],
+['🎤 Pop Star','A pop star offers to endorse you if you back her pet cause.',[['Accept',()=>{gain(2,6);lose(4,3);log('Youth swoon. Business raises an eyebrow.')}],['Decline',()=>{S.rep+=1;log('You stay on message.')}]]],
+['🧨 Rival Scandal','{o} is caught in a scandal!',[['Pile on',()=>{all(hit,()=>3);S.orep-=8;S.heat+=2;log('You pile on hard.')}],['Take the high road',()=>{all(hit,()=>1.5);S.orep-=6;S.rep+=4;log('You look statesmanlike while they burn.')}]]],
+['🧳 Suitcase of Cash','A billionaire offers $25k, no questions asked.',[['Take it',()=>{S.cash+=25;S.heat+=12;log('The cash is nice. The paper trail is not.')}],['Refuse',()=>{S.rep+=3;log('You send the suitcase back.')}]]]];
+
+/* ---------- saving ---------- */
+const KEY='eSim1',HKEY='eSimH';
+const CAN_SAVE=(()=>{try{localStorage.setItem('eSimT','1');localStorage.removeItem('eSimT');return true}catch(e){return false}})();
+const save=()=>{if(!CAN_SAVE||!S||S.done)return;try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+const fix=v=>{v.up=v.up||{};v.cd=v.cd||{};v.log=v.log||[];if(v.pend===undefined)v.pend=null;v.dirt=v.dirt||0;v.prop=v.prop||0;return v};
+const load=()=>{try{const v=JSON.parse(localStorage.getItem(KEY));return v&&v.blocs&&v.wk<=12&&!v.done?fix(v):null}catch(e){return null}};
+const hof=()=>{try{const h=JSON.parse(localStorage.getItem(HKEY)||'[]');return Array.isArray(h)?h:[]}catch(e){return[]}};
+const saved=()=>load()||(S&&!S.done?S:null);
+
+/* ---------- modal ---------- */
+const md=$('#m');let mdAt=0,mdCancel=null;
+const modalOpen=()=>md.classList.contains('on');
+function closeModal(){md.classList.remove('on');mdCancel=null;document.body.style.overflow=''}
+// opts: [label, fn, disabled (bool or reason string)]
+function ask(t,x,o){
+  const box=md.firstElementChild;box.innerHTML=`<h2>${t}</h2>${x?`<p>${x}</p>`:''}`;mdCancel=null;
+  o.forEach(([l,f,d])=>{const e=document.createElement('button');e.innerHTML=l+(typeof d=='string'&&d?`<small class="reason">${d}</small>`:'');e.disabled=!!d;
+    const isCancel=l=='Cancel';if(isCancel)e.className='cancel';
+    const run=()=>{if(!isCancel&&Date.now()-mdAt<250)return;closeModal();f&&f();if(screen=='game'){render();if(!modalOpen())pend()}};
+    e.onclick=run;if(isCancel)mdCancel=run;box.append(e)});
+  md.classList.add('on');mdAt=Date.now();document.body.style.overflow='hidden';box.scrollTop=0;
+  const first=[...box.querySelectorAll('button')].find(b=>!b.disabled&&!b.classList.contains('cancel'));first&&first.focus({preventScroll:true});
+}
+md.addEventListener('click',e=>{if(e.target===md&&mdCancel)mdCancel()});
+document.addEventListener('keydown',e=>{if(e.key=='Escape'&&modalOpen()&&mdCancel)mdCancel()});
+
+/* ---------- toast ---------- */
+let tt;
+function flush(){const t=$('#toast');if(!fresh.length)return;t.innerHTML=fresh.slice(-4).map(x=>`<div>${x}</div>`).join('');fresh=[];t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),4000)}
+function hideToast(){fresh=[];clearTimeout(tt);$('#toast').classList.remove('on')}
+
+/* ---------- menu ---------- */
+function cont(){const v=saved();if(!v)return intro();S=v;if(!S.pw)S.pw=tot();render();pend()}
+function intro(){screen='menu';closeModal();hideToast();lastTick='';const sv=saved(),H=hof();
+$('#app').innerHTML=`<div class="flags"></div>
+<div class="poster"><small>★ ★ ★ ★ ★</small><div>VOTE</div><div id="pn">Alex Morgan</div><small>for a brighter tomorrow*</small><br><small><i>*Promises are not legally binding.</i></small></div>
+<div class="card"><h2>Election Simulator</h2>
+<p>Twelve weeks. One rival. Win by any means… <b>just don't get caught.</b> Spend 3 actions a week, then your rival strikes back. <b>Trust</b> decides who the undecided voters pick on Election Day. <b>Scandal Risk</b> is the chance your dirty tricks surface. Debates hit in weeks 5 and 10. ${CAN_SAVE?'Your campaign autosaves.':'<span class="reason">Saving is blocked in this viewer, so progress lasts until you close it.</span>'}</p>
+${sv?`<button class="go" style="width:100%;margin-bottom:14px" onclick="cont()">▶ Continue: ${esc(sv.name)}, week ${sv.wk} of 12</button>`:''}
+<label class="lb" for="nm">Candidate name</label><input id="nm" value="Alex Morgan" maxlength="24" autocomplete="off" oninput="$('#pn').textContent=this.value.trim()||'You'" onkeydown="if(event.key=='Enter')start()">
+<label class="lb" for="bg">Background</label><select id="bg">${Object.entries(BGS).map(([k,v])=>`<option value="${k}">${v[0]}: ${v[1]}</option>`).join('')}</select>
+<label class="lb" for="df">Rival</label><select id="df"><option value=".8">Easy rival</option><option value="1" selected>Normal rival</option><option value="1.3">Ruthless rival</option></select>
+<button class="go" style="width:100%;margin-top:4px" onclick="start()">${sv?'Start a new campaign':'Launch campaign'}</button></div>
+${H.length?`<div class="card"><h2>Past campaigns</h2>${H.map(h=>`<p style="margin:.35em 0">${h.r=='Won'?'🏆':'💀'} <b>${esc(h.n)}</b> ${esc(h.r)}${h.t?' with '+h.t+'%':''}, ${esc(h.l)}</p>`).join('')}<button class="link" onclick="clearHof()">Clear history</button></div>`:''}`;
+scrollTo(0,0)}
+function clearHof(){ask('Clear history?','This erases your past campaign results.',[['Yes, clear it',()=>{try{localStorage.removeItem(HKEY)}catch(e){}intro()}],['Cancel']])}
+
+function start(){const name=$('#nm').value.replace(/[<&>"]/g,'').trim()||'You',b=$('#bg').value,k=+$('#df').value,sv=saved();
+  if(sv)ask('Start over?',`This replaces your saved campaign (<b>${esc(sv.name)}</b>, week ${sv.wk}).`,[['Yes, start fresh',()=>begin(name,b,k)],['Cancel']]);
+  else begin(name,b,k)}
+function begin(name,b,k){const p=BGS[b][2];
+S={name,opp:pick(OPP),wk:1,ap:3,cash:p.cash,rep:p.rep,orep:50,heat:8,bg:b,k,dirt:0,prop:0,pac:0,up:{},cd:{},log:[],pend:null,deb:null,scan:0,nz:R(-2.5,2.5),plan:pick(PL),blocs:B.map(()=>({me:R(29,35),op:R(31,37)+(k-1)*8}))};
+S.pw=tot();log(`The race begins. You vs <b>${S.opp}</b>.`);scrollTo(0,0);render()}
+
+/* ---------- main screen ---------- */
+const st=(a,b,c='',x='')=>`<div class="stat ${x}"><small>${a}</small><b>${b}</b><small>${c||'&nbsp;'}</small></div>`;
+const seg=(k,c,w)=>`<i class="${c}" data-k="${k}" data-w="${cl(w).toFixed(2)}"></i>`;
+const delta=v=>Math.abs(v)<.05?`<span class="dl fl">± 0 this week</span>`:`<span class="dl ${v>0?'up':'dn'}">${v>0?'▲':'▼'} ${Math.abs(v).toFixed(1)} this week</span>`;
+function why(a,i){if(a[5]&&!a[5]())return RSN[i]||'Unavailable right now';if(S.ap<1)return 'No actions left — end the week';if(S.cash<a[1])return `Need $${Math.ceil(a[1]-S.cash)}k more`;return null}
+
+function render(){screen='game';chk();save();
+const app=$('#app'),prevW={},prevN={};
+app.querySelectorAll('[data-k]').forEach(e=>prevW[e.dataset.k]=e.style.width);
+app.querySelectorAll('[data-n]').forEach(e=>prevN[e.dataset.n]=+e.dataset.v);
+const sy=window.scrollY||0,[me,op]=tot(),n=S.up.poll?0:S.nz,pm=cl(me+n),po=cl(op-n),u=Math.max(0,100-pm-po),pw=S.pw||[me,op];
+const last=S.wk==12;
+app.innerHTML=`<div class="flags"></div><div class="tick"><b>LIVE</b><span>${S.log[0]||''}</span></div>
+<div class="row" style="margin:14px 6px 0 0">${st('Week',S.wk+' / 12',S.ap+(S.ap==1?' action':' actions')+' left')}${st('War chest','$'+Math.round(S.cash)+'k')}${st('Trust',Math.round(S.rep),'Rival '+Math.round(S.orep),S.rep<=15?'hot':'')}${st('Scandal risk',Math.round(S.heat)+'%',S.pac?'Super PAC on':'',S.heat>=50?'hot':'')}${st('Dirt files',S.dirt)}</div>
+<div class="card"><h2>The polls</h2><div class="vs"><div><span class="big me-t" data-n="pm" data-v="${pm}">${pm.toFixed(0)}</span>${esc(S.name)}${delta(me-pw[0])}</div><div class="vsb">VS</div><div class="r"><span class="big op-t" data-n="po" data-v="${po}">${po.toFixed(0)}</span>${esc(S.opp)}${delta(op-pw[1])}</div></div>
+<div class="bar mid">${seg('pm','me',pm)}${seg('pu','und',u)}${seg('po','op',po)}</div>
+<p class="mut" style="text-align:center;margin:4px 0 0">Undecided ${u.toFixed(0)}%${S.up.poll?' · exact numbers':' · polls are ±3'}</p>
+${S.blocs.map((b,i)=>`<div class="bloc"><div class="t"><span>${B[i][0]} <small class="mut">${B[i][1]*100}% of vote</small></span><span><b class="me-t">${b.me|0}</b> / <b class="op-t">${b.op|0}</b></span></div><div class="bar">${seg('b'+i+'m','me',b.me)}${seg('b'+i+'u','und',100-b.me-b.op)}${seg('b'+i+'o','op',b.op)}</div></div>`).join('')}</div>
+<div class="card"><h2>This week's moves</h2><p class="mut" style="margin-top:0">Red-edged moves are shady. Teal ones are clean.</p><div class="grid">${A.map((a,i)=>{const r=why(a,i);return `<button class="${DIRTY.includes(i)?'dirty':'clean'}${S.cash<a[1]?' need':''}" ${r?'disabled':''} onclick="go(${i})"><b>${a[0]}</b><span class="cost">${a[1]?'$'+a[1]+'k':'free'}</span><small>${r?`<span class="reason">${r}</span>`:a[3]}</small></button>`}).join('')}</div><br><button class="go" style="width:100%" onclick="endWeek()">${last?'🗳️ Go to Election Day':`End week ${S.wk} →`}${S.ap?` (${S.ap} unused)`:''}</button></div>
+<div class="card"><h2>Campaign HQ</h2><p class="mut" style="margin-top:0">Hires don't use an action.</p><div class="grid">${U.map(x=>{const h=S.up[x[0]],poor=!h&&S.cash<x[2];return `<button class="${poor?'need':''}" ${h||poor?'disabled':''} onclick="buy('${x[0]}')"><b>${x[1]}</b><span class="cost">${h?'hired ✓':'$'+x[2]+'k'}</span><small>${h?`<span class="ok">On your team · ${x[3]}</span>`:poor?`<span class="reason">Need $${Math.ceil(x[2]-S.cash)}k more</span> · ${x[3]}`:x[3]}</small></button>`}).join('')}</div></div>
+<div class="card" id="feed"><h2>News feed</h2>${S.up.poll?`<p class="hi">📡 Intel: ${esc(S.opp)} is planning ${PLN[S.plan]} this week.</p>`:''}${S.log.map(t=>`<p>${t}</p>`).join('')}</div>
+<div class="foot"><button onclick="intro()">⏏ Exit to menu</button><br>${CAN_SAVE?'💾 Progress autosaves after every move.':'⚠️ This viewer blocks saving, so progress lasts until you close it.'}</div>`;
+// smooth bars: start from previous widths, then animate to new ones
+const segs=app.querySelectorAll('[data-k]');
+segs.forEach(e=>{e.style.width=prevW[e.dataset.k]||e.dataset.w+'%'});
+void app.offsetWidth;
+segs.forEach(e=>{e.style.width=e.dataset.w+'%'});
+// count-up for the big poll numbers
+if(!RM.matches)app.querySelectorAll('[data-n]').forEach(e=>{const from=prevN[e.dataset.n],to=+e.dataset.v;if(from==null||Math.abs(from-to)<.5)return;const t0=performance.now();e.textContent=from.toFixed(0);
+  const step=t=>{const k=Math.min(1,(t-t0)/600),v=from+(to-from)*(1-Math.pow(1-k,3));e.textContent=v.toFixed(0);if(k<1&&e.isConnected)requestAnimationFrame(step)};requestAnimationFrame(step)});
+// ticker flash when headline changes
+if(S.log[0]!==lastTick){if(lastTick)app.querySelector('.tick').classList.add('new');lastTick=S.log[0]}
+try{window.scrollTo(0,sy)}catch(e){}
+flush()}
+
+function go(i){if(screen!='game'||modalOpen())return;const a=A[i];if(why(a,i))return;
+if(a[2]==1)ask('Pick a bloc',a[0]+': '+a[3],[...B.map((b,j)=>[`${b[0]} <small>You ${S.blocs[j].me|0}% · Rival ${S.blocs[j].op|0}% · Undecided ${Math.max(0,100-S.blocs[j].me-S.blocs[j].op)|0}%</small>`,()=>act(i,j)]),['Cancel']]);
+else if(a[2]==2)ask('Pick a donor','Money now, favors later. Each donor needs 3 weeks to cool off.',[...D.map((d,j)=>[`${d[0]}: <b>$${donorGift(d)}k</b><small>Favor: ${d[2]}</small>`,()=>act(i,j),S.cd[j]>0?`Cooling off, ${S.cd[j]} more week${S.cd[j]>1?'s':''}`:false]),['Cancel']]);
+else{act(i);render()}}
+function act(i,j){const a=A[i];if(why(a,i))return;S.cash-=a[1];S.ap--;a[4](j);chk()}
+function buy(k){if(screen!='game'||modalOpen())return;const x=U.find(y=>y[0]==k);if(!x||S.up[k]||S.cash<x[2])return;S.cash-=x[2];S.up[k]=1;log(`You hire: ${x[1]}.`);render()}
+
+/* ---------- week cycle ---------- */
+function opp(){const k=S.k,i=Math.random()*5|0,n=B[i][0],p=S.plan;
+if(p=='rally'){ogain(i,R(3,5)*k);log(`${S.opp} rallies ${n}.`)}
+else if(p=='attack'){lose(i,R(3,6)*k);S.rep-=2;log(`${S.opp} runs an attack ad in ${n}. You lose ground.`)}
+else if(p=='ads'){all(ogain,()=>R(1,2)*k);log(`${S.opp} floods the airwaves.`)}
+else if(p=='smear'){all(lose,()=>R(1,2.5)*k);S.rep-=5*k;log(`${S.opp} spreads a smear about you. Trust drops.`)}
+else{all(ogain,()=>R(.5,1.5)*k);S.orep+=2;log(`${S.opp} tours town halls to good reviews.`)}}
+
+function endWeek(){if(screen!='game'||modalOpen())return;
+if(S.pac){const i=Math.random()*5|0;hit(i,R(2,4));S.orep-=1.5;S.heat+=3;log(`Your Super PAC quietly hammers ${S.opp} in ${B[i][0]}.`)}
+opp();S.heat-=3+(S.up.spin?6:0);chk();
+if(Math.random()*100<S.heat*.55){S.rep-=10;all(lose,()=>R(2,4));S.heat=25;S.scan=1;log('🚨 <b>SCANDAL!</b> Reporters expose your dirty tricks.')}
+for(const k in S.cd)S.cd[k]=Math.max(0,S.cd[k]-1);
+S.wk++;S.ap=3;S.plan=pick(PL);S.nz=R(-2.5,2.5);chk();
+if(S.rep<=0)return election(1);
+if(S.wk>12)return election();
+S.pend=(S.wk==5||S.wk==10)?'d':Math.random()<.65?Math.random()*E.length|0:null;
+S.pw=tot();render();pend()}
+
+// Shows whatever is waiting: scandal notice, then debate or event.
+function pend(){if(screen!='game'||modalOpen())return;
+if(S.scan)return ask('🚨 Scandal!','Reporters exposed your dirty tricks. Trust −10, every bloc slips, and Scandal Risk resets to 25%.',[['Ride it out',()=>{S.scan=0}]]);
+const p=S.pend;if(p==null)return;
+if(p=='d')return debate();
+const e=E[p];if(!e){S.pend=null;return}
+ask(e[0],e[1].replace(/\{o\}/g,esc(S.opp)),e[2].map(([l,f,c])=>[l,()=>{S.pend=null;if(c)S.cash-=c;f();chk()},c&&S.cash<c?`You only have $${Math.round(S.cash)}k`:false]))}
+
+function debate(){const Q=['The economy','Healthcare','Integrity'],d=S.deb||(S.deb={r:0,sc:0,res:[]});
+if(d.r>=3){const w=d.sc>=2;if(w){all(gain,()=>R(2,3.5));S.rep+=5}else{all(lose,()=>R(1.5,3));S.rep-=4}S.pend=null;S.deb=null;chk();
+  log(w?`You <b>won</b> the debate ${d.sc}–${3-d.sc}!`:`You lost the debate ${d.sc}–${3-d.sc}.`);
+  return ask(w?'🏆 You won the debate!':'😬 You lost the debate',`Final score ${d.sc}–${3-d.sc}. ${w?'Every bloc warms to you and Trust rises by 5.':'Every bloc cools on you and Trust drops by 4.'}`,[['Back to the trail']])}
+const odds=[.35+S.rep/300,.35+S.dirt*.12,.3+S.rep/200].map(x=>Math.min(.9,x)),pc=x=>Math.round(x*100)+'%';
+const prev=d.r?`${d.res[d.r-1]?'<span class="ok">✅ You took round '+d.r+'.</span>':'<span class="reason">❌ Your rival took round '+d.r+'.</span>'} Score ${d.sc}–${d.r-d.sc}.<br>`:'Three rounds. Win two to win the night.<br>';
+const ans=o=>()=>{const won=Math.random()<odds[o];d.res.push(won);d.sc+=won?1:0;d.r++;debate()};
+ask(`🎤 Round ${d.r+1} of 3: ${Q[d.r]}`,prev+'How do you answer?',[
+  [`📚 Policy wonk <small>${pc(odds[0])} chance · better with Trust</small>`,ans(0)],
+  [`🔥 Zinger <small>${pc(odds[1])} chance · stronger with dirt in hand</small>`,ans(1)],
+  [`🤝 Warm and presidential <small>${pc(odds[2])} chance · leans hard on Trust</small>`,ans(2)]])}
+
+function election(c){screen='end';closeModal();hideToast();let T=0,rows='';const q=Math.max(S.rep,1),ratio=q/(q+Math.max(S.orep,1));
+if(!c)S.blocs.forEach((b,i)=>{const sh=b.me+Math.max(0,100-b.me-b.op)*ratio+R(-2,2);T+=B[i][1]*sh;rows+=`<div class="rev row-r" style="animation-delay:${i*.8+.6}s"><span>${B[i][0]}</span><b>${sh.toFixed(1)}%</b><span>${sh>50?'✅ yours':'❌ rival'}</span></div>`});
+const win=!c&&T>50,L=S.prop>=3?'🤖 The Puppet Master':S.rep>=70?'😇 Honest Abe':S.heat>=50?'🧈 Teflon Candidate':'🐍 Career Politician',dl=c?.3:5;
+S.done=1;
+try{const h=hof();h.unshift({n:S.name,r:c?'Collapsed':win?'Won':'Lost',t:c?0:+T.toFixed(1),l:L});localStorage.setItem(HKEY,JSON.stringify(h.slice(0,8)));localStorage.removeItem(KEY)}catch(e){}
+$('#app').innerHTML=`<div class="flags"></div><div class="tick"><b>${c?'BREAKING':'ELECTION NIGHT'}</b><span>${c?'Campaign implodes':'Polls are closed. The counties are reporting…'}</span></div>
+<div class="card"><h2>${c?'Meltdown':'The results'}</h2>${rows}
+<div class="rev" style="animation-delay:${dl-.4}s;margin-top:12px">${c?'<p>Trust hit zero. Even your staff quit.</p>':`<div class="bar mid"><i class="me" style="width:${T}%"></i><i class="op" style="width:${100-T}%"></i></div><p><b class="me-t">${esc(S.name)} ${T.toFixed(1)}%</b> vs <b class="op-t">${esc(S.opp)} ${(100-T).toFixed(1)}%</b></p>`}</div>
+<div style="text-align:center"><div class="stamp ${win?'w':'l'}" style="animation-delay:${dl}s">${c?'DROPPED OUT':win?(T>58?'LANDSLIDE':'ELECTED'):'DEFEATED'}</div></div>
+<div class="rev" style="animation-delay:${dl+.6}s"><p>Legacy: <b class="hi">${L}</b> · Trust ${Math.round(S.rep)} · Propaganda used ${S.prop}×</p><button class="go" style="width:100%" onclick="intro()">Run again</button></div></div>`;
+scrollTo(0,0)}
+
+intro();
+</script></body></html>
