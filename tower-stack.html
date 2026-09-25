@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Tower Stack</title>
+<style>
+  :root { --bg: #2e3778; --fg: #ffffff; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif; user-select: none;
+    -webkit-user-select: none; touch-action: none; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #hud { position: fixed; top: 6vh; left: 0; right: 0; text-align: center; color: var(--fg);
+    pointer-events: none; }
+  #score { font-size: 72px; font-weight: 300; line-height: 1; text-shadow: 0 2px 10px rgba(0,0,0,.25); }
+  #best { font-size: 14px; letter-spacing: 2px; opacity: .6; margin-top: 8px; }
+  #msg { position: fixed; bottom: 12vh; left: 0; right: 0; text-align: center; color: var(--fg);
+    pointer-events: none; font-size: 20px; letter-spacing: 3px; transition: opacity .3s; }
+  #msg .title { font-size: 44px; font-weight: 700; letter-spacing: 6px; margin-bottom: 14px; }
+  #msg .sub { opacity: .75; animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  #perfect { position: fixed; top: 22vh; left: 0; right: 0; text-align: center; color: #fff;
+    font-size: 26px; font-weight: 700; letter-spacing: 4px; opacity: 0; pointer-events: none;
+    transition: opacity .15s, transform .4s; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"><div id="score">0</div><div id="best">BEST 0</div></div>
+<div id="perfect">PERFECT!</div>
+<div id="msg"><div class="title">TOWER</div><div class="sub">TAP / CLICK / SPACE TO START</div></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const msgEl = document.getElementById('msg');
+  const perfectEl = document.getElementById('perfect');
+
+  // ---- world constants ----
+  const SIZE = 10;       // starting block width/depth
+  const H = 2;           // slab height
+  const RANGE = 14;      // how far the moving block slides
+  const PERFECT_TOL = 0.35;
+  const COS = Math.cos(Math.PI / 6), SIN = 0.5;
+
+  let W, Hh, dpr, baseUnit;
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; Hh = window.innerHeight;
+    canvas.width = W * dpr; canvas.height = Hh * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    baseUnit = Math.min(W / 30, Hh / 42);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---- storage (may be unavailable) ----
+  let best = 0;
+  try { best = parseInt(localStorage.getItem('towerStackBest') || '0', 10) || 0; } catch (e) {}
+  bestEl.textContent = 'BEST ' + best;
+
+  // ---- audio ----
+  let actx = null;
+  function beep(freq, dur = 0.12, type = 'sine', vol = 0.15) {
+    try {
+      if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.setValueAtTime(vol, actx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + dur);
+      o.connect(g).connect(actx.destination);
+      o.start(); o.stop(actx.currentTime + dur);
+    } catch (e) {}
+  }
+
+  // ---- state ----
+  let stack, current, debris, ripples, state, score, combo, speed, camY, unit, hueStart;
+
+  function colorFor(i) { return (hueStart - i * 4 + 360) % 360; }
+
+  function reset() {
+    hueStart = 135 + Math.random() * 40;
+    stack = [{ x: -SIZE / 2, z: -SIZE / 2, w: SIZE, d: SIZE, y: 0, yb: -14, hue: colorFor(0) }];
+    debris = []; ripples = [];
+    score = 0; combo = 0; speed = 14;
+    camY = 0; unit = baseUnit;
+    current = null;
+    scoreEl.textContent = '0';
+  }
+
+  function spawn() {
+    const prev = stack[stack.length - 1];
+    const i = stack.length;
+    const axis = i % 2 === 0 ? 'x' : 'z';
+    const b = { x: prev.x, z: prev.z, w: prev.w, d: prev.d, y: i * H, yb: i * H - H,
+                hue: colorFor(i), axis, dir: 1 };
+    b[axis] = prev[axis] - RANGE;
+    current = b;
+  }
+
+  function place() {
+    const prev = stack[stack.length - 1];
+    const b = current;
+    const ax = b.axis, sz = ax === 'x' ? 'w' : 'd';
+    const delta = b[ax] - prev[ax];
+
+    if (Math.abs(delta) < PERFECT_TOL) {
+      b[ax] = prev[ax];
+      combo++;
+      // reward streaks: grow the block back a little
+      if (combo >= 3 && b[sz] < SIZE) {
+        const grow = Math.min(0.6, SIZE - b[sz]);
+        b[sz] += grow; b[ax] -= grow / 2;
+      }
+      ripples.push({ b: { ...b }, t: 0 });
+      showPerfect();
+      beep(440 * Math.pow(2, Math.min(combo, 12) / 12), 0.18, 'triangle', 0.18);
+    } else {
+      const overlap = b[sz] - Math.abs(delta);
+      if (overlap <= 0) { gameOver(); return; }
+      combo = 0;
+      const cut = { ...b, vy: 0, rot: 0 };
+      if (delta > 0) {
+        cut[ax] = prev[ax] + prev[sz]; cut[sz] = Math.abs(delta);
+      } else {
+        cut[ax] = b[ax]; cut[sz] = Math.abs(delta);
+        b[ax] = prev[ax];
+      }
+      b[sz] = overlap;
+      debris.push(cut);
+      beep(220 + stack.length * 6, 0.08, 'square', 0.06);
+    }
+    delete b.dir;
+    stack.push(b);
+    score++;
+    scoreEl.textContent = score;
+    speed = Math.min(14 + score * 0.35, 30);
+    spawn();
+  }
+
+  function showPerfect() {
+    perfectEl.textContent = combo > 1 ? 'PERFECT ×' + combo : 'PERFECT!';
+    perfectEl.style.transition = 'none';
+    perfectEl.style.opacity = 1; perfectEl.style.transform = 'translateY(0) scale(1.15)';
+    requestAnimationFrame(() => {
+      perfectEl.style.transition = 'opacity .8s ease-out .2s, transform .8s ease-out';
+      perfectEl.style.opacity = 0; perfectEl.style.transform = 'translateY(-20px) scale(1)';
+    });
+  }
+
+  function gameOver() {
+    debris.push({ ...current, vy: 0 });
+    current = null;
+    state = 'over';
+    beep(160, 0.4, 'sawtooth', 0.1);
+    if (score > best) {
+      best = score;
+      try { localStorage.setItem('towerStackBest', String(best)); } catch (e) {}
+    }
+    bestEl.textContent = 'BEST ' + best;
+    msgEl.innerHTML = '<div class="title">' + score + '</div><div class="sub">TAP TO PLAY AGAIN</div>';
+    setTimeout(() => { msgEl.style.opacity = 1; }, 500);
+  }
+
+  function input() {
+    if (state === 'menu') {
+      state = 'play'; msgEl.style.opacity = 0; spawn();
+    } else if (state === 'play') {
+      place();
+    } else if (state === 'over' && msgEl.style.opacity === '1') {
+      reset(); state = 'play'; msgEl.style.opacity = 0; spawn();
+    }
+  }
+  window.addEventListener('pointerdown', e => { e.preventDefault(); input(); });
+  window.addEventListener('keydown', e => {
+    if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); if (!e.repeat) input(); }
+  });
+
+  // ---- rendering ----
+  function proj(x, y, z) {
+    return [W / 2 + (x - z) * COS * unit, Hh * 0.58 + (x + z) * SIN * unit - (y - camY) * unit];
+  }
+  function poly(pts, fill) {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+    ctx.fillStyle = fill; ctx.fill();
+  }
+  function drawBox(b, alpha = 1) {
+    const x0 = b.x, x1 = b.x + b.w, z0 = b.z, z1 = b.z + b.d, yt = b.y, yb = b.yb;
+    ctx.globalAlpha = alpha;
+    const h = b.hue;
+    // right face (x = x1)
+    poly([proj(x1, yt, z0), proj(x1, yt, z1), proj(x1, yb, z1), proj(x1, yb, z0)], `hsl(${h},78%,40%)`);
+    // left face (z = z1)
+    poly([proj(x0, yt, z1), proj(x1, yt, z1), proj(x1, yb, z1), proj(x0, yb, z1)], `hsl(${h},80%,50%)`);
+    // top
+    poly([proj(x0, yt, z0), proj(x1, yt, z0), proj(x1, yt, z1), proj(x0, yt, z1)], `hsl(${h},85%,60%)`);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawBackground() {
+    const top = stack.length ? stack[stack.length - 1].hue : 200;
+    const g = ctx.createLinearGradient(0, 0, 0, Hh);
+    g.addColorStop(0, `hsl(${(top + 180) % 360},35%,24%)`);
+    g.addColorStop(1, `hsl(${(top + 200) % 360},45%,34%)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, Hh);
+  }
+
+  // ---- loop ----
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, 0.05);
+    last = now;
+
+    const topY = stack[stack.length - 1].y;
+    if (current) {
+      const ax = current.axis;
+      const prev = stack[stack.length - 1];
+      current[ax] += current.dir * speed * dt;
+      if (current[ax] > prev[ax] + RANGE) { current[ax] = prev[ax] + RANGE; current.dir = -1; }
+      if (current[ax] < prev[ax] - RANGE) { current[ax] = prev[ax] - RANGE; current.dir = 1; }
+    }
+
+    // camera
+    let targetCam = topY, targetUnit = baseUnit;
+    if (state === 'over') {
+      const towerH = topY + 16;
+      targetUnit = Math.min(baseUnit, (Hh * 0.55) / towerH);
+      targetCam = topY * 0.5;
+    }
+    camY += (targetCam - camY) * Math.min(1, dt * 5);
+    unit += (targetUnit - unit) * Math.min(1, dt * 3);
+
+    // debris physics
+    for (const d of debris) {
+      d.vy -= 60 * dt;
+      d.y += d.vy * dt; d.yb += d.vy * dt;
+    }
+    debris = debris.filter(d => d.y > camY - 80);
+    for (const r of ripples) r.t += dt;
+    ripples = ripples.filter(r => r.t < 0.6);
+
+    drawBackground();
+
+    // draw stack (bottom → top), with debris interleaved by height
+    const items = stack.map(b => ({ b, a: 1 }));
+    for (const d of debris) items.push({ b: d, a: 1 });
+    items.sort((p, q) => p.b.y - q.b.y || (p.b.x + p.b.z) - (q.b.x + q.b.z));
+    for (const it of items) drawBox(it.b, it.a);
+
+    // perfect ripples
+    for (const r of ripples) {
+      const k = r.t / 0.6, grow = k * 3;
+      const b = r.b, y = b.y;
+      const pts = [proj(b.x - grow, y, b.z - grow), proj(b.x + b.w + grow, y, b.z - grow),
+                   proj(b.x + b.w + grow, y, b.z + b.d + grow), proj(b.x - grow, y, b.z + b.d + grow)];
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < 4; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      ctx.strokeStyle = `rgba(255,255,255,${1 - k})`;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    if (current) drawBox(current);
+
+    requestAnimationFrame(frame);
+  }
+
+  reset();
+  state = 'menu';
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
