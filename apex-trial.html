@@ -155,10 +155,9 @@ kbd{font-family:var(--display);font-weight:700;background:var(--panel-2);border:
 
 <div id="hud" hidden>
   <div class="hud-tl">
-    <div class="row"><span class="lbl">Lap</span><span id="hLap">1/3</span></div>
+    <div class="row"><span class="lbl">Sector</span><span id="hLap">1/4</span></div>
     <div id="hTime">0:00.000</div>
-    <div class="row"><span class="lbl">This lap</span><span class="v" id="hLapTime">0:00.000</span></div>
-    <div class="row"><span class="lbl">Best lap</span><span class="v c-best" id="hBest">—</span></div>
+    <div class="row"><span class="lbl">Personal best</span><span class="v c-best" id="hBest">—</span></div>
   </div>
   <canvas id="minimap" width="300" height="300"></canvas>
   <button id="pauseBtn" aria-label="Pause">II</button>
@@ -167,7 +166,7 @@ kbd{font-family:var(--display);font-weight:700;background:var(--panel-2);border:
   <div id="wrong" hidden>WRONG WAY</div>
   <div id="lights" hidden><i></i><i></i><i></i><i></i><i></i></div>
   <div id="msg" hidden></div>
-  <div id="help"><kbd>W A S D</kbd> / arrows drive · <kbd>Space</kbd> handbrake · <kbd>R</kbd> reset car · <kbd>C</kbd> camera · <kbd>1</kbd> menu</div>
+  <div id="help"><kbd>W A S D</kbd> / arrows drive · <kbd>Space</kbd> handbrake · <kbd>R</kbd> restart · <kbd>C</kbd> camera · <kbd>1</kbd> menu</div>
 </div>
 
 <div id="touch" hidden>
@@ -223,7 +222,7 @@ kbd{font-family:var(--display);font-weight:700;background:var(--panel-2);border:
         </div>
         <div class="card keys">
           <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows to drive, <kbd>Space</kbd> handbrake</div>
-          <div><kbd>R</kbd> reset car to track · <kbd>C</kbd> camera · <kbd>1</kbd> menu · <kbd>Enter</kbd> retry</div>
+          <div><kbd>R</kbd> restart from the start line · <kbd>C</kbd> camera · <kbd>1</kbd> menu · <kbd>Enter</kbd> retry</div>
         </div>
       </div>
     </div>
@@ -289,22 +288,22 @@ const CARS=[
 const carById=id=>CARS.find(c=>c.id===id)||CARS[0];
 
 const TRACKS=[
- {id:'pinewood',name:'Pinewood Loop',blurb:'Rolling forest circuit, fast sweepers',laps:3,
+ {id:'pinewood',name:'Pinewood Loop',blurb:'Rolling forest circuit, fast sweepers',laps:1,
   pts:[[0,0,0],[140,2,0],[230,6,40],[260,10,130],[210,12,200],[120,8,190],[70,5,250],[-30,6,290],[-140,10,250],[-200,6,160],[-180,3,70],[-100,0,20]],
   theme:{skyTop:'#4a86c5',skyBot:'#cfe3ef',fogNear:250,fogFar:1500,ground:'#3d6a34',embank:0x56733d,sun:0xfff1d6,sunI:1.05,hemiSky:0xd8ecff,hemiGround:0x4d5c3a,hemiI:0.75,mount:0x5f7f86,scenery:'pine',road:'#3b3e44'}},
- {id:'dunes',name:'Dune Circuit',blurb:'Long straights, one brutal hairpin',laps:3,
+ {id:'dunes',name:'Dune Circuit',blurb:'Long straights, one brutal hairpin',laps:1,
   pts:[[0,0,0],[160,4,-20],[300,14,20],[340,22,120],[280,26,190],[200,18,150],[150,10,210],[180,6,300],[90,4,360],[-40,10,330],[-120,20,250],[-90,14,160],[-160,6,90],[-120,2,10]],
   theme:{skyTop:'#3f4f8f',skyBot:'#f7b27a',fogNear:220,fogFar:1400,ground:'#c89a62',embank:0xb9864f,sun:0xffc890,sunI:1.15,hemiSky:0xffd9b3,hemiGround:0x8a5a33,hemiI:0.7,mount:0x9b5f45,scenery:'desert',road:'#4a4643'}},
- {id:'night',name:'Nightline',blurb:'Tight city loop under streetlights',laps:3,
+ {id:'night',name:'Nightline',blurb:'Tight city loop under streetlights',laps:1,
   pts:[[0,0,0],[110,0,0],[170,2,50],[150,4,120],[80,4,130],[50,3,190],[110,2,250],[60,4,320],[-40,8,320],[-90,6,250],[-50,4,180],[-110,2,120],[-120,0,40],[-60,0,-10]],
   theme:{skyTop:'#05070f',skyBot:'#1b2340',fogNear:120,fogFar:900,ground:'#1a1f26',embank:0x2a2f36,sun:0x8fa6ff,sunI:0.35,hemiSky:0x4a5a88,hemiGround:0x14161c,hemiI:0.55,mount:0x121622,scenery:'city',road:'#2c2f35',night:true}},
- {id:'ridge',name:'Ridge Crossover',blurb:'Snowy figure-eight that flies over itself on a viaduct',laps:3,
+ {id:'ridge',name:'Ridge Crossover',blurb:'Snowy figure-eight that flies over itself on a viaduct',laps:1,
   pts:[[0,14,0],[70,14,70],[150,12,110],[235,10,95],[285,8,40],[292,7,-10],[245,6,-50],[170,4,-75],[100,2,-60],[40,0.5,-40],[-40,0,40],[-110,2,90],[-160,3,95],[-175,4,135],[-230,5,140],[-262,7,80],[-250,8,-10],[-190,10,-50],[-115,12,-75],[-50,14,-45]],
   theme:{skyTop:'#5d8fc9',skyBot:'#e3edf3',fogNear:250,fogFar:1500,ground:'#e4eaee',embank:0xcfd9de,sun:0xffffff,sunI:0.95,hemiSky:0xe8f2ff,hemiGround:0x8a98a3,hemiI:0.8,mount:0xeef3f6,scenery:'pine',snow:true,road:'#3a3d44'}},
- {id:'harbour',name:'Harbour Chicanes',blurb:'Dusk street circuit: chicanes, esses and a waterfront hook',laps:3,
+ {id:'harbour',name:'Harbour Chicanes',blurb:'Dusk street circuit: chicanes, esses and a waterfront hook',laps:1,
   pts:[[0,0,0],[80,0,0],[110,0,11],[140,0,-5],[170,0,6],[250,1,0],[310,2,20],[335,3,70],[325,3,130],[290,3,160],[275,3,200],[300,3,240],[270,3,280],[200,2,290],[130,2,270],[100,2,220],[60,1,205],[35,1,245],[0,1,280],[-60,1,270],[-90,1,210],[-60,1,160],[-100,1,110],[-145,0,60],[-120,0,10],[-60,0,-5]],
   theme:{skyTop:'#2b2d5c',skyBot:'#f08a5d',fogNear:180,fogFar:1100,ground:'#4a4e55',embank:0x5a5e66,sun:0xffa46b,sunI:0.7,hemiSky:0xffc6a0,hemiGround:0x2a2c33,hemiI:0.6,mount:0x3a3550,scenery:'city',water:true,road:'#34373d',night:true}},
- {id:'canyon',name:'Canyon Switchback',blurb:'Climb three switchback terraces, then plunge back down the rim',laps:3,
+ {id:'canyon',name:'Canyon Switchback',blurb:'Climb three switchback terraces, then plunge back down the rim',laps:1,
   pts:[[-100,0,0],[0,2,0],[100,5,0],[180,7,-2],[228,9,18],[232,11,46],[190,13,62],[100,17,60],[0,21,60],[-60,24,62],[-102,26,80],[-100,28,106],[-60,30,122],[40,34,120],[140,38,120],[220,40,125],[265,38,170],[240,34,225],[120,28,240],[0,22,235],[-140,16,225],[-240,12,190],[-280,8,110],[-260,4,30],[-190,1,-10]],
   theme:{skyTop:'#4d7fb8',skyBot:'#f3d3a8',fogNear:250,fogFar:1500,ground:'#b0603a',embank:0xa0512e,sun:0xfff0d8,sunI:1.1,hemiSky:0xffe3c4,hemiGround:0x7a3a20,hemiI:0.7,mount:0x9a4a2a,scenery:'desert',road:'#45403d'}}
 ];
@@ -329,6 +328,9 @@ function normalizeSave(o){
   for(const t of TRACKS){
     const r=tr[t.id]; if(!r||typeof r!=='object') continue;
     const e={runs:Number.isInteger(r.runs)?r.runs:0};
+    // times from the old 3-lap format can't be compared with 1-lap runs, so only the run count carries over
+    if((Number.isInteger(r.laps)?r.laps:3)!==t.laps){ s.tracks[t.id]=e; continue; }
+    e.laps=t.laps;
     if(isNum(r.bestTotal)&&r.bestTotal>0) e.bestTotal=r.bestTotal;
     if(isNum(r.bestLap)&&r.bestLap>0) e.bestLap=r.bestLap;
     // records set before cars existed were driven in the Sprint GT
@@ -671,7 +673,7 @@ setCarModel(save.settings.car); setGhostModel('gt');
 const car={x:0,y:0,z:0,th:0,vx:0,vz:0,vf:0,steer:0,idx:0,frac:0,lat:0,prog:0,pitch:0,wheelRot:0,thr:0,scrape:0};
 let state='menu', raceTime=0, countdown=0, nextCp=1, cpTimes=[], lapTimes=[], lapStart=0, ghostRec=[], ghostData=null, ghostNextRec=0;
 let runCar=carById(save.settings.car), gearTops=GEARS.slice(), autoMargin=0.8;
-let wrongTimer=0, resetCooldown=0, finishTimer=0, shake=0, menuT=0, autopilot=false, camMode=save.settings.cam;
+let wrongTimer=0, finishTimer=0, shake=0, menuT=0, autopilot=false, camMode=save.settings.cam;
 const input={up:false,down:false,left:false,right:false,hb:false};
 
 function wrapA(a){ while(a>Math.PI)a-=Math.PI*2; while(a<-Math.PI)a+=Math.PI*2; return a; }
@@ -701,11 +703,6 @@ function placeCarAtStart(){
   Object.assign(car,{x:T.px[k],z:T.pz[k],y:T.py[k],th:T.hd[k],vx:0,vz:0,vf:0,steer:0,idx:k,prog:0,pitch:0,thr:0,scrape:0});
   trackQuery(car); car.prog=car.seg+car.frac-N; car.lastProg=car.prog;
   syncCarMesh(0);
-}
-function resetCar(){
-  if(resetCooldown>0) return;
-  const k=car.idx; Object.assign(car,{x:T.px[k],z:T.pz[k],th:T.hd[k],vx:0,vz:0,vf:0,steer:0});
-  trackQuery(car); resetCooldown=1.0; flashMsg('RESET','');
 }
 
 function startRun(){
@@ -754,7 +751,6 @@ function step(dt){
   if(state==='racing') ctl=getControls();
   else if(state==='finished'){ ctl=autoDrive(); ctl.thr=0; ctl.brk=c.vf>2?0.35:0; }
   else if(state==='countdown'){ const k=getControls(); c.thr=k.thr; }
-  if(resetCooldown>0) resetCooldown-=dt;
 
   // steering smoothing (faster return to centre)
   const tgt=ctl.str, rate=(Math.abs(tgt)<Math.abs(c.steer)||Math.sign(tgt)!==Math.sign(c.steer))?9:4.5;
@@ -839,7 +835,7 @@ function hitCheckpoint(n,t){
 function finishRun(){
   state='finished'; finishTimer=0;
   const r=rec(trackDef.id), total=cpTimes[cpTimes.length-1];
-  const prevBest=r.bestTotal, prevLap=r.bestLap;
+  const prevBest=r.bestTotal, prevLap=r.bestLap, prevSplits=r.splits;
   // final ghost frame
   ghostRec.push(Math.round(car.x*10),Math.round(car.y*10),Math.round(car.z*10),Math.round(car.th*1000));
   r.runs=(r.runs||0)+1;
@@ -849,8 +845,9 @@ function finishRun(){
   const newLap=!(prevLap<=runBestLap);
   if(newLap){ r.bestLap=runBestLap; r.lapCar=runCar.id; }
   if(newRecord){ r.bestTotal=total; r.car=runCar.id; r.splits=cpTimes.slice(); r.ghost=ghostRec.slice(); }
+  r.laps=trackDef.laps;
   const saved=persist();
-  lastResult={total,prevBest,prevLap,newRecord,newLap,laps:lapTimes.slice(),saved,runBestLap,unlocked:!goldBefore&&hasGold()};
+  lastResult={total,prevBest,prevLap,newRecord,newLap,laps:lapTimes.slice(),splits:cpTimes.slice(),prevSplits,saved,runBestLap,unlocked:!goldBefore&&hasGold()};
   flashMsg('FINISH','c-amber',1.4);
   refreshTrackList();
 }
@@ -911,13 +908,11 @@ function fmtD(d){ return (d<0?'−':'+')+Math.abs(d).toFixed(3); }
 let hudCache={};
 function setText(id,v){ if(hudCache[id]!==v){ hudCache[id]=v; document.getElementById(id).textContent=v; } }
 function updateHUD(){
-  const laps=trackDef.laps, lapNo=Math.min(laps,lapTimes.length+1);
-  setText('hLap',lapNo+'/'+laps);
+  const total=trackDef.laps*CP;
+  setText('hLap',Math.min(total,cpTimes.length+1)+'/'+total);
   const t=state==='finished'?cpTimes[cpTimes.length-1]:raceTime;
   setText('hTime',fmt(t));
-  setText('hLapTime',fmt(state==='finished'?lapTimes[lapTimes.length-1]:raceTime-lapStart));
-  const r=rec(trackDef.id);
-  setText('hBest',fmt(Math.min(r.bestLap||Infinity,bestLapThisRun)));
+  setText('hBest',fmt(rec(trackDef.id).bestTotal));
   const kmh=Math.round(Math.abs(car.vf)*3.6); setText('hSpeed',String(kmh));
   let g=1; const sp=Math.abs(car.vf); while(g<6&&sp>gearTops[g]) g++;
   setText('hGear',car.vf<-0.5?'R':(sp<0.3&&!car.thr?'N':String(g)));
@@ -1022,8 +1017,8 @@ function medalTargets(def,L){
   // average speeds (m/s) needed for each medal, calibrated with the test autopilot
   const d=L*def.laps; return {gold:Math.round(d/def.medal[0]*10)/10,silver:Math.round(d/def.medal[1]*10)/10,bronze:Math.round(d/def.medal[2]*10)/10};
 }
-TRACKS[0].medal=[49,44.8,40.1]; TRACKS[1].medal=[42.7,39.1,34.9]; TRACKS[2].medal=[38.6,35.3,31.6];
-TRACKS[3].medal=[45.8,41.9,37.4]; TRACKS[4].medal=[37.1,33.9,30.3]; TRACKS[5].medal=[46.8,42.9,38.3];
+TRACKS[0].medal=[46.5,42.6,38]; TRACKS[1].medal=[41.2,37.7,33.7]; TRACKS[2].medal=[37.2,34,30.4];
+TRACKS[3].medal=[43.9,40.2,35.9]; TRACKS[4].medal=[36.1,33,29.5]; TRACKS[5].medal=[45.4,41.6,37.1];
 const hasGold=()=>TRACKS.some(d=>medalFor(d,trackLen(d),(save.tracks[d.id]||{}).bestTotal)==='gold');
 const carUnlocked=c=>!c.unlock||hasGold();
 function trackLen(def){
@@ -1037,8 +1032,8 @@ function refreshTrackList(){
     const b=document.createElement('button'); b.className='track'; b.id='track-'+def.id; b.setAttribute('aria-pressed',String(save.settings.track===def.id));
     b.innerHTML=`<span class="medal ${med||''}" title="${med?med+' medal':'No medal yet'}"></span>
       <span class="tn">${def.name}</span>
-      <span class="pb"><span class="lbl">Personal best</span><span class="num ${r.bestTotal?'c-best':''}">${fmt(r.bestTotal)}</span><span class="lbl">Best lap ${fmt(r.bestLap)}</span>${r.bestTotal?`<span class="lbl pb-car">${carById(r.car).name}</span>`:''}</span>
-      <span class="meta">${def.blurb} · ${(L/1000).toFixed(2)} km · ${def.laps} laps${r.runs?` · ${r.runs} run${r.runs>1?'s':''}`:''}</span>
+      <span class="pb"><span class="lbl">Personal best</span><span class="num ${r.bestTotal?'c-best':''}">${fmt(r.bestTotal)}</span>${r.bestTotal?`<span class="lbl pb-car">${carById(r.car).name}</span>`:''}</span>
+      <span class="meta">${def.blurb} · ${(L/1000).toFixed(2)} km · ${def.laps===1?'1 lap':def.laps+' laps'}${r.runs?` · ${r.runs} run${r.runs>1?'s':''}`:''}</span>
       <span class="targets"><span><b style="color:var(--gold)">Gold</b> ${fmt(m.gold)}</span><span><b style="color:var(--silver)">Silver</b> ${fmt(m.silver)}</span><span><b style="color:var(--bronze)">Bronze</b> ${fmt(m.bronze)}</span></span>`;
     b.addEventListener('click',()=>{ if(save.settings.track===def.id) return; save.settings.track=def.id; persist(); loadTrack(def.id); refreshTrackList(); });
     list.appendChild(b);
@@ -1127,9 +1122,11 @@ function showResults(){
   const nextM=!med?['bronze',m.bronze]:med==='bronze'?['silver',m.silver]:med==='silver'?['gold',m.gold]:null;
   $('#resMedal').innerHTML=(med?`<span class="medal ${med}"></span>${med} medal`:'<span class="medal"></span>No medal')+(nextM?` <span class="lbl" style="margin-left:auto">${nextM[0]}: ${fmt(nextM[1])}</span>`:'');
   const ul=$('#resLaps'); ul.innerHTML='';
-  R.laps.forEach((t,i)=>{ const li=document.createElement('li'); const best=t===R.runBestLap&&R.newLap;
-    li.innerHTML=`<span>Lap ${i+1}</span><span class="${best?'c-best':''}">${fmt(t)}</span>`; ul.appendChild(li); });
-  $('#resSave').innerHTML=R.saved?(R.newRecord?'<b>Saved.</b> Your ghost will race you next time.':(R.newLap?'<b>Saved.</b> New best lap recorded.':'<b>Saved.</b> Run counted.')):'<b style="color:var(--red)">Not saved</b> — this browser is blocking storage. Use Copy save code from the menu.';
+  // split times, each with its gap to the previous best run
+  R.splits.forEach((t,i)=>{ const li=document.createElement('li'), pb=R.prevSplits&&R.prevSplits[i];
+    const d=isNum(pb)?`<span class="${t<pb?'c-best':t>pb?'c-bad':'c-amber'}" style="margin-left:auto;margin-right:14px">${fmtD(t-pb)}</span>`:'';
+    li.innerHTML=`<span>${i===R.splits.length-1?'Finish':'Split '+(i+1)}</span>${d}<span>${fmt(t)}</span>`; ul.appendChild(li); });
+  $('#resSave').innerHTML=R.saved?(R.newRecord?'<b>Saved.</b> Your ghost will race you next time.':'<b>Saved.</b> Run counted.'):'<b style="color:var(--red)">Not saved</b> — this browser is blocking storage. Use Copy save code from the menu.';
   $('#results').hidden=false; $('#retryBtn').focus();
   $('#touch').hidden=true;
 }
@@ -1146,7 +1143,7 @@ window.addEventListener('keydown',e=>{
     else if(state==='racing'||state==='countdown') pause();
     else if(state==='finished') toMenu();
   }
-  else if(e.code==='KeyR'&&state==='racing') resetCar();
+  else if(e.code==='KeyR'&&(state==='racing'||state==='countdown'||state==='finished')) startRun();
   else if(e.code==='KeyC'&&state!=='menu'){ camMode=camMode?0:1; save.settings.cam=camMode; camSnap=true; persist(); refreshSettings(); }
   else if(e.code==='Enter'&&!$('#results').hidden){ e.preventDefault(); startRun(); }
 });
