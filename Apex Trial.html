@@ -1,3 +1,4 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Apex Trial</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -45,6 +46,8 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--amber);outli
 .hud-br{position:absolute;right:calc(20px + env(safe-area-inset-right,0px));bottom:calc(18px + env(safe-area-inset-bottom,0px));text-align:right}
 #hSpeed{font-size:64px;line-height:.9;font-weight:800;font-variant-numeric:tabular-nums}
 #hGear{display:inline-block;margin-left:8px;font-size:22px;font-weight:800;color:var(--amber)}
+#drift{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1;margin-bottom:4px}
+#drift .lbl{font-size:14px}
 #split{position:absolute;left:50%;top:22%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:6px;
   padding:6px 16px;display:flex;gap:14px;align-items:baseline;opacity:0;transition:opacity .25s}
 #split.show{opacity:1}
@@ -161,12 +164,12 @@ kbd{font-family:var(--display);font-weight:700;background:var(--panel-2);border:
   </div>
   <canvas id="minimap" width="300" height="300"></canvas>
   <button id="pauseBtn" aria-label="Pause">II</button>
-  <div class="hud-br"><span id="hSpeed">0</span><span id="hGear">N</span><div class="lbl">km/h</div></div>
+  <div class="hud-br"><div id="drift" hidden><span class="lbl">Drift</span> <b id="driftAng" class="c-amber">0°</b></div><span id="hSpeed">0</span><span id="hGear">N</span><div class="lbl">km/h</div></div>
   <div id="split"><span class="lbl" id="splitLbl">Split 1</span><span class="t" id="splitT"></span><span class="d" id="splitD"></span></div>
   <div id="wrong" hidden>WRONG WAY</div>
   <div id="lights" hidden><i></i><i></i><i></i><i></i><i></i></div>
   <div id="msg" hidden></div>
-  <div id="help"><kbd>W A S D</kbd> / arrows drive · <kbd>Space</kbd> handbrake · <kbd>R</kbd> restart · <kbd>C</kbd> camera · <kbd>1</kbd> menu</div>
+  <div id="help"><kbd>W A S D</kbd> / arrows drive · <kbd>Space</kbd> drift · <kbd>R</kbd> restart · <kbd>C</kbd> camera · <kbd>1</kbd> menu</div>
 </div>
 
 <div id="touch" hidden>
@@ -182,7 +185,7 @@ kbd{font-family:var(--display);font-weight:700;background:var(--panel-2);border:
   <div class="panel">
     <div class="brand">
       <h1>Apex<span>/</span>Trial</h1>
-      <p>Three laps against the clock and your own ghost. Every record is saved on this device.</p>
+      <p>One lap against the clock and your own ghost. Every record is saved on this device.</p>
     </div>
     <div class="menu-grid">
       <div class="tracks" id="trackList"></div>
@@ -222,6 +225,7 @@ kbd{font-family:var(--display);font-weight:700;background:var(--panel-2);border:
         </div>
         <div class="card keys">
           <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows to drive, <kbd>Space</kbd> handbrake</div>
+          <div>Drift: tap <kbd>Space</kbd> while steering at speed, stay on the throttle to hold the slide, steer the other way to control the angle, lift to grip up.</div>
           <div><kbd>R</kbd> restart from the start line · <kbd>C</kbd> camera · <kbd>1</kbd> menu · <kbd>Enter</kbd> retry</div>
         </div>
       </div>
@@ -269,20 +273,22 @@ if(!window.THREE){ document.getElementById('fatal').hidden=false; document.getEl
 const $=s=>document.querySelector(s);
 const HALF=7, SHO=1.6, EDGE=HALF+SHO, CAR_R=1.05, LIMIT=EDGE-CAR_R, SAMPLE=2, CP=4, GHOST_DT=0.1, STEP=1/120;
 const GEARS=[0,13,23,33,43,53,66];
+let DRIFT_EDGE=0.1; // how much tighter a slide can bend the car's path than grip can
 const COLORS=[0xd7263d,0x1f6fd1,0x9bd33a,0xff7a1a,0xe8e6e1,0x2c3038];
 
 // max: top speed m/s · acc: m/s² · brk: m/s² · grip: lateral slip decay · steer: yaw rate · fall: speed where steering halves
-// hb: slip decay under handbrake (lower = longer drift) · kerb: drag on kerbs
+// hb: slip decay while drifting (lower = longer slide) · follow: how much the travel direction follows the nose mid-drift
+// pow: throttle oversteer in a drift · keep: share of sideways speed recovered as forward speed · kerb: drag on kerbs
 const CARS=[
- {id:'gt',name:'Sprint GT',blurb:'The benchmark. Balanced, predictable, quick everywhere.',max:64,acc:25,brk:44,grip:8.5,steer:2.35,fall:34,hb:1.4,kerb:0.35,
+ {id:'gt',name:'Sprint GT',blurb:'The benchmark. Balanced, predictable, quick everywhere.',max:64,acc:25,brk:44,grip:8.5,steer:2.35,fall:34,hb:1.4,follow:0.35,pow:0.7,keep:0.55,kerb:0.35,
   shape:{len:4.3,wid:1.9,bodyH:0.45,ride:0,cabL:1.9,cabH:0.45,cabZ:-0.25,cabW:1.45,roof:true,wing:'small',wheelR:0.37}},
- {id:'roadster',name:'Roadster',blurb:'Light and darty. Brakes late and turns in hard, but runs out of breath on straights.',max:57,acc:27.5,brk:50,grip:11,steer:2.8,fall:38,hb:1.6,kerb:0.35,
+ {id:'roadster',name:'Roadster',blurb:'Light and darty. Brakes late and turns in hard, but runs out of breath on straights.',max:57,acc:27.5,brk:50,grip:11,steer:2.8,fall:38,hb:1.6,follow:0.45,pow:0.5,keep:0.5,kerb:0.35,
   shape:{len:3.8,wid:1.75,bodyH:0.4,ride:-0.03,cabL:0.9,cabH:0.35,cabZ:0.05,cabW:1.5,roof:false,wing:'none',wheelR:0.34}},
- {id:'muscle',name:'V8 Muscle',blurb:'Monster top speed and lazy steering. The rear wants to overtake the front.',max:75,acc:29,brk:38,grip:5.4,steer:2.1,fall:31,hb:1.2,kerb:0.4,
+ {id:'muscle',name:'V8 Muscle',blurb:'Monster top speed and lazy steering. The rear wants to overtake the front.',max:75,acc:29,brk:38,grip:5.4,steer:2.1,fall:31,hb:1.2,follow:0.3,pow:1.1,keep:0.6,kerb:0.4,
   shape:{len:4.8,wid:2.0,bodyH:0.55,ride:0.02,cabL:1.8,cabH:0.48,cabZ:-0.55,cabW:1.6,roof:true,wing:'none',wheelR:0.4,scoop:true}},
- {id:'rally',name:'Rally Hatch',blurb:'Shrugs off kerbs and loves a handbrake flick into hairpins.',max:60,acc:26,brk:42,grip:7.2,steer:2.6,fall:36,hb:0.8,kerb:0.08,
+ {id:'rally',name:'Rally Hatch',blurb:'Shrugs off kerbs and loves a handbrake flick into hairpins.',max:60,acc:26,brk:42,grip:7.2,steer:2.6,fall:36,hb:0.8,follow:0.3,pow:0.8,keep:0.8,kerb:0.08,
   shape:{len:4.0,wid:1.85,bodyH:0.5,ride:0.18,cabL:2.0,cabH:0.55,cabZ:-0.35,cabW:1.55,roof:true,wing:'small',wheelR:0.42,scoop:true}},
- {id:'hyper',name:'Apex Hyper',blurb:'Everything turned up: fastest, grippiest, hardest-braking car in the garage.',max:77,acc:31,brk:54,grip:10,steer:2.5,fall:37,hb:1.4,kerb:0.3,unlock:'gold',
+ {id:'hyper',name:'Apex Hyper',blurb:'Everything turned up: fastest, grippiest, hardest-braking car in the garage.',max:77,acc:31,brk:54,grip:10,steer:2.5,fall:37,hb:1.4,follow:0.4,pow:0.7,keep:0.6,kerb:0.3,unlock:'gold',
   shape:{len:4.6,wid:2.05,bodyH:0.36,ride:-0.05,cabL:1.6,cabH:0.38,cabZ:-0.1,cabW:1.35,roof:true,wing:'big',wheelR:0.36}}
 ];
 const carById=id=>CARS.find(c=>c.id===id)||CARS[0];
@@ -669,10 +675,69 @@ function setGhostModel(id){
 }
 setCarModel(save.settings.car); setGhostModel('gt');
 
+/* ---------- tyre effects: skid marks + smoke ---------- */
+const _m=new THREE.Matrix4(), _q=new THREE.Quaternion(), _s=new THREE.Vector3(), _p=new THREE.Vector3(), _up=new THREE.Vector3(0,1,0);
+const SKID_MAX=800;
+const skidGeo=new THREE.PlaneGeometry(0.28,1); skidGeo.rotateX(-Math.PI/2);
+const skidMesh=new THREE.InstancedMesh(skidGeo,new THREE.MeshBasicMaterial({color:0x0b0b0b,transparent:true,opacity:0.5,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-4}),SKID_MAX);
+skidMesh.count=0; skidMesh.frustumCulled=false; scene.add(skidMesh);
+let skidHead=0, skidLast=[null,null];
+const SMOKE=90;
+const smokeMesh=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.5,1),new THREE.MeshLambertMaterial({color:0xe6e6e6,transparent:true,opacity:0.3,depthWrite:false}),SMOKE);
+smokeMesh.frustumCulled=false; scene.add(smokeMesh);
+const puffs=Array.from({length:SMOKE},()=>({life:0,x:0,y:0,z:0,vx:0,vz:0})); let puffHead=0, puffAcc=0;
+function rearWheels(){
+  const S=runCar.shape, wx=S.wid/2-0.03, wz=-(S.len/2-0.8), s=Math.sin(car.th), co=Math.cos(car.th);
+  return [[car.x+wx*co+wz*s, car.z-wx*s+wz*co],[car.x-wx*co+wz*s, car.z+wx*s+wz*co]];
+}
+function clearTyreFx(){
+  skidMesh.count=0; skidHead=0; skidLast=[null,null]; skidMesh.instanceMatrix.needsUpdate=true;
+  puffs.forEach(p=>p.life=0); updateSmoke(0,0);
+}
+function updateSkids(active){
+  const W=rearWheels();
+  for(let i=0;i<2;i++){
+    if(!active){ skidLast[i]=null; continue; }
+    const [x,z]=W[i], L=skidLast[i];
+    if(!L){ skidLast[i]=[x,z]; continue; }
+    const dx=x-L[0], dz=z-L[1], d=Math.hypot(dx,dz);
+    if(d<0.6) continue;
+    if(d<6){
+      _p.set((x+L[0])/2,car.y+0.05,(z+L[1])/2); _q.setFromAxisAngle(_up,Math.atan2(dx,dz)); _s.set(1,1,d+0.05);
+      _m.compose(_p,_q,_s); skidMesh.setMatrixAt(skidHead,_m);
+      skidHead=(skidHead+1)%SKID_MAX; skidMesh.count=Math.min(SKID_MAX,skidMesh.count+1); skidMesh.instanceMatrix.needsUpdate=true;
+    }
+    skidLast[i]=[x,z];
+  }
+}
+function updateSmoke(dt,emit){
+  if(emit>0){ puffAcc+=dt*emit*36;
+    while(puffAcc>=1){ puffAcc--; const w=rearWheels()[puffHead%2], p=puffs[puffHead]; puffHead=(puffHead+1)%SMOKE;
+      Object.assign(p,{life:1,x:w[0],y:car.y+0.3,z:w[1],vx:car.vx*0.2+(Math.random()-0.5)*1.5,vz:car.vz*0.2+(Math.random()-0.5)*1.5}); } }
+  for(let i=0;i<SMOKE;i++){ const p=puffs[i];
+    if(p.life>0){ p.life-=dt*1.1; p.x+=p.vx*dt; p.z+=p.vz*dt; p.y+=0.7*dt; }
+    const k=p.life>0?(0.6+(1-p.life)*2.8)*Math.min(1,p.life*3):0;
+    _p.set(p.x,p.y,p.z); _q.identity(); _s.set(k,k,k); _m.compose(_p,_q,_s); smokeMesh.setMatrixAt(i,_m); }
+  smokeMesh.instanceMatrix.needsUpdate=true;
+}
+let screechAmt=0;
+function updateTyreFx(dt){
+  const spd=Math.hypot(car.vx,car.vz), slip=Math.abs(car.slip);
+  const sliding=spd>5&&(slip>0.13||car.spin>0||(car.hb&&spd>4));
+  updateSkids(sliding);
+  const amt=spd>5?Math.min(1,Math.max(0,(slip-0.12)*2.5)+(car.spin>0?0.6:0)):0;
+  updateSmoke(dt,amt);
+  screechAmt=sliding?Math.min(1,0.3+amt):0;
+  // drift angle readout
+  const on=car.driftAmt>0.3&&state==='racing', el=$('#drift');
+  if(el.hidden===on) el.hidden=!on;
+  if(on){ const deg=Math.round(slip*57.3); setText('driftAng',deg+'°'); const cls=deg>65?'c-bad':'c-amber'; if(el.dataset.c!==cls){ el.dataset.c=cls; $('#driftAng').className=cls; } }
+}
+
 /* ================= GAME STATE ================= */
-const car={x:0,y:0,z:0,th:0,vx:0,vz:0,vf:0,steer:0,idx:0,frac:0,lat:0,prog:0,pitch:0,wheelRot:0,thr:0,scrape:0};
+const car={x:0,y:0,z:0,th:0,vx:0,vz:0,vf:0,steer:0,idx:0,frac:0,lat:0,prog:0,pitch:0,wheelRot:0,thr:0,scrape:0,drift:false,driftAmt:0,spin:0,slip:0,hb:false};
 let state='menu', raceTime=0, countdown=0, nextCp=1, cpTimes=[], lapTimes=[], lapStart=0, ghostRec=[], ghostData=null, ghostNextRec=0;
-let runCar=carById(save.settings.car), gearTops=GEARS.slice(), autoMargin=0.8;
+let runCar=carById(save.settings.car), gearTops=GEARS.slice(), autoMargin=0.8, autoDrift={on:false,entry:4,angle:0.35,over:8};
 let wrongTimer=0, finishTimer=0, shake=0, menuT=0, autopilot=false, camMode=save.settings.cam;
 const input={up:false,down:false,left:false,right:false,hb:false};
 
@@ -700,7 +765,7 @@ function trackQuery(c){
 }
 function placeCarAtStart(){
   const N=T.N, k=N-6;
-  Object.assign(car,{x:T.px[k],z:T.pz[k],y:T.py[k],th:T.hd[k],vx:0,vz:0,vf:0,steer:0,idx:k,prog:0,pitch:0,thr:0,scrape:0});
+  Object.assign(car,{x:T.px[k],z:T.pz[k],y:T.py[k],th:T.hd[k],vx:0,vz:0,vf:0,steer:0,idx:k,prog:0,pitch:0,thr:0,scrape:0,drift:false,driftAmt:0,spin:0,slip:0,hb:false});
   trackQuery(car); car.prog=car.seg+car.frac-N; car.lastProg=car.prog;
   syncCarMesh(0);
 }
@@ -720,7 +785,7 @@ function startRun(){
   if(ghostData) placeGhost(0);
   $('#lights').hidden=false; document.querySelectorAll('#lights i').forEach(e=>e.classList.remove('on'));
   $('#msg').hidden=true; $('#wrong').hidden=true; $('#split').classList.remove('show');
-  initAudio();
+  initAudio(); clearTyreFx(); $('#drift').hidden=true;
   hudCache={}; updateHUD(true);
   camSnap=true;
 }
@@ -744,7 +809,12 @@ function autoDrive(){
     const vc=(-kap+Math.sqrt(kap*kap+4*kap*s/P.fall))/(2*kap/P.fall);
     target=Math.min(target,Math.sqrt(vc*vc+2*P.brk*0.7*Math.max(0,k*SAMPLE-8)));
   }
-  return {thr:car.vf<target?1:0, brk:car.vf>target+2?1:0, str, hb:false};
+  let thr=car.vf<target?1:0, brk=car.vf>target+2?1:0, hb=false;
+  if(autoDrift.on){ // test driver: flick into a slide instead of braking, hold it on the throttle
+    if(!car.drift&&car.vf>target+autoDrift.entry&&car.vf>14&&Math.abs(str)>0.3){ hb=true; brk=0; thr=1; }
+    else if(car.drift){ hb=Math.abs(car.slip)<autoDrift.angle; thr=car.vf<target+autoDrift.over?1:0; brk=car.vf>target+autoDrift.over+8?1:0; }
+  }
+  return {thr, brk, str, hb};
 }
 function step(dt){
   const c=car; let ctl={thr:0,brk:0,str:0,hb:false};
@@ -757,20 +827,50 @@ function step(dt){
   c.steer+=Math.max(-rate*dt,Math.min(rate*dt,tgt-c.steer));
   if(state==='countdown'){ c.steer=0; return; }
 
-  const fx=Math.sin(c.th), fz=Math.cos(c.th), rx=-fz, rz=fx; // right = (-cos, sin)
+  let fx=Math.sin(c.th), fz=Math.cos(c.th), rx=-fz, rz=fx; // right = (-cos, sin)
   let vf=c.vx*fx+c.vz*fz, vl=c.vx*rx+c.vz*rz;
   const P=runCar, onKerb=Math.abs(c.lat)>HALF-0.4;
   if(ctl.thr>0){ if(vf<0) vf+=34*ctl.thr*dt; else vf+=P.acc*ctl.thr*Math.max(0,1-(vf/P.max)**2)*dt; }
   if(ctl.brk>0){ if(vf>0.5) vf-=P.brk*ctl.brk*dt; else if(vf>-14) vf-=14*ctl.brk*dt; }
   vf-=vf*(0.045+(onKerb?P.kerb:0))*dt;
   if(!ctl.thr&&!ctl.brk) vf-=Math.sign(vf)*Math.min(Math.abs(vf),2.2*dt);
-  if(ctl.hb) vf-=Math.sign(vf)*Math.min(Math.abs(vf),7*dt);
-  const sp=Math.abs(vf);
-  const steerRate=P.steer*Math.min(1,sp/5)/(1+sp/P.fall)*(ctl.hb?1.55:1);
-  c.th+=c.steer*steerRate*dt*(vf<0?-1:1);
-  vl*=Math.exp(-(ctl.hb?P.hb:P.grip)*dt);
-  const nfx=Math.sin(c.th), nfz=Math.cos(c.th), nrx=-nfz, nrz=nfx;
-  c.vx=nfx*vf+nrx*vl; c.vz=nfz*vf+nrz*vl; c.vf=vf; c.thr=ctl.thr;
+  if(ctl.hb) vf-=Math.sign(vf)*Math.min(Math.abs(vf),(c.drift?4:7)*dt);
+
+  // ---- drift: handbrake + steering at speed breaks the rear loose ----
+  // slip angle β: >0 when the car is travelling to the right of where its nose points (i.e. sliding in a left turn)
+  const spd=Math.hypot(vf,vl), beta=spd>2?Math.atan2(vl,Math.abs(vf)):0;
+  if(!c.drift&&ctl.hb&&vf>11&&Math.abs(c.steer)>0.25&&c.spin<=0){ c.drift=true; c.th+=c.steer*0.06; }
+  if(c.drift){
+    if(Math.abs(beta)>1.75){ c.drift=false; c.spin=0.8; if(state==='racing') flashMsg('SPIN','c-bad',0.8); }
+    else if(spd<6||(!ctl.hb&&Math.abs(beta)<0.1)) c.drift=false;
+  }
+  if(c.spin>0) c.spin-=dt;
+  c.driftAmt+=((c.drift?1:0)-c.driftAmt)*Math.min(1,(c.drift?8:4)*dt);
+  const D=c.driftAmt, sp=Math.abs(vf), lowSp=Math.min(1,sp/5);
+  const gripRate=P.steer*lowSp/(1+sp/P.fall)*(ctl.hb?1.25:1);
+  const driftRate=P.steer*1.45*lowSp/(1+sp/(P.fall*1.8));
+  let dth=c.steer*(gripRate*(1-D)+driftRate*D)*dt*(vf<0?-1:1);
+  dth+=D*P.pow*beta*(0.35+0.65*ctl.thr)*dt;          // power oversteer: throttle swings the tail further out
+  c.th+=dth;
+  // with grip the velocity turns with the nose; while drifting it only partly follows, so the car slides
+  const turn=dth*(1-D*(1-P.follow)), ca=Math.cos(turn), sa=Math.sin(turn);
+  const wx=fx*vf+rx*vl, wz=fz*vf+rz*vl, nx=wx*ca+wz*sa, nz=wz*ca-wx*sa;
+  fx=Math.sin(c.th); fz=Math.cos(c.th); rx=-fz; rz=fx;
+  vf=nx*fx+nz*fz; vl=nx*rx+nz*rz;
+  // sideways grip: low under handbrake, held by throttle, recovers when you lift
+  let g=P.grip*(1-D)+(ctl.hb?P.hb:P.hb*1.8+(ctl.thr?0:2.5))*D;
+  if(c.spin>0) g=Math.min(g,2.5);
+  const l0=Math.abs(vl); vl*=Math.exp(-g*dt);
+  vf+=Math.sign(vf||1)*(l0-Math.abs(vl))*P.keep*D;  // a tidy slide turns sideways momentum back into forward speed
+  c.vx=fx*vf+rx*vl; c.vz=fz*vf+rz*vl;
+  if(D>0.02&&spd>2){
+    // tyres can't out-corner grip by much: cap how fast the direction of travel bends while sliding
+    const maxTurn=P.steer*lowSp/(1+sp/P.fall)*(1+DRIFT_EDGE*D)*dt;
+    const da=wrapA(Math.atan2(c.vx,c.vz)-Math.atan2(wx,wz));
+    if(Math.abs(da)>maxTurn){ const back=da-Math.sign(da)*maxTurn, cb=Math.cos(-back), sb=Math.sin(-back), ox=c.vx;
+      c.vx=ox*cb+c.vz*sb; c.vz=c.vz*cb-ox*sb; vf=c.vx*fx+c.vz*fz; vl=c.vx*rx+c.vz*rz; }
+  }
+  c.vf=vf; c.thr=ctl.thr; c.slip=beta; c.hb=ctl.hb;
   c.x+=c.vx*dt; c.z+=c.vz*dt;
   c.wheelRot+=vf*dt/P.shape.wheelR;
 
@@ -781,7 +881,7 @@ function step(dt){
     const s=Math.sign(c.lat), push=Math.abs(c.lat)-LIMIT;
     c.x-=c.nrx*push*s; c.z-=c.nrz*push*s; c.lat=LIMIT*s;
     const vn=(c.vx*c.nrx+c.vz*c.nrz)*s;
-    if(vn>0){ c.vx-=c.nrx*s*vn*1.2; c.vz-=c.nrz*s*vn*1.2; if(vn>5){ shake=Math.min(1,vn/25); thud(Math.min(1,vn/30)); } }
+    if(vn>0){ c.vx-=c.nrx*s*vn*1.2; c.vz-=c.nrz*s*vn*1.2; if(vn>8) c.drift=false; if(vn>5){ shake=Math.min(1,vn/25); thud(Math.min(1,vn/30)); } }
     const k=Math.exp(-0.9*dt); c.vx*=k; c.vz*=k; c.scrape=0.1;
     // nudge heading toward track direction to avoid getting stuck nose-in
     const hd=T.hd[c.idx], d=wrapA(hd-c.th), dd=wrapA(hd+Math.PI-c.th), aim=Math.abs(d)<Math.abs(dd)?d:dd;
@@ -883,7 +983,9 @@ function updateCamera(dt){
   const sp=Math.abs(car.vf);
   // smooth the camera's heading and height (not its world position) so it never lags behind at speed
   if(camSnap){ camHead=car.th; camY=car.y; camSnap=false; }
-  camHead+=wrapA(car.th-camHead)*(camMode===0?1-Math.exp(-dt*6):1);
+  // mid-drift the chase cam looks partly along the direction of travel rather than where the nose points
+  const camAim=camMode===0?car.th-car.slip*0.6*car.driftAmt:car.th;
+  camHead+=wrapA(camAim-camHead)*(camMode===0?1-Math.exp(-dt*6):1);
   camY+=(car.y-camY)*(1-Math.exp(-dt*8));
   const fx=Math.sin(camHead), fz=Math.cos(camHead);
   if(camMode===0){
@@ -956,7 +1058,11 @@ function initAudio(){
     const o1=actx.createOscillator(), o2=actx.createOscillator(), f=actx.createBiquadFilter(), g=actx.createGain(), g2=actx.createGain();
     o1.type='sawtooth'; o2.type='square'; f.type='lowpass'; f.frequency.value=700; g.gain.value=0; g2.gain.value=0.4;
     o1.connect(f); o2.connect(g2); g2.connect(f); f.connect(g); g.connect(actx.destination); o1.start(); o2.start();
-    eng={o1,o2,f,g};
+    // tyre screech: looping noise through a narrow band-pass
+    const nb=actx.createBuffer(1,actx.sampleRate,actx.sampleRate), nd=nb.getChannelData(0); for(let i=0;i<nd.length;i++) nd[i]=Math.random()*2-1;
+    const ns=actx.createBufferSource(), bp=actx.createBiquadFilter(), sg=actx.createGain(); ns.buffer=nb; ns.loop=true; bp.type='bandpass'; bp.frequency.value=1700; bp.Q.value=4; sg.gain.value=0;
+    ns.connect(bp); bp.connect(sg); sg.connect(actx.destination); ns.start();
+    eng={o1,o2,f,g,sg,bp};
   }catch(e){ actx=null; eng=null; }
 }
 function updateAudio(){
@@ -968,6 +1074,8 @@ function updateAudio(){
   eng.o1.frequency.setTargetAtTime(f0,now,0.04); eng.o2.frequency.setTargetAtTime(f0*0.5,now,0.04);
   eng.f.frequency.setTargetAtTime(400+rpm*1400*(car.thr?1:0.6),now,0.05);
   eng.g.gain.setTargetAtTime(on?(0.025+0.04*(car.thr||0)):0,now,0.06);
+  eng.sg.gain.setTargetAtTime(on&&state!=='countdown'?screechAmt*0.09:0,now,0.05);
+  eng.bp.frequency.setTargetAtTime(1500+Math.abs(car.slip)*900,now,0.08);
 }
 function beep(freq,dur){
   if(!actx||!save.settings.sound) return;
@@ -999,7 +1107,7 @@ function frame(now){
     acc+=dt; let n=0; while(acc>=STEP&&n<20){ step(STEP); acc-=STEP; n++; } if(n>=20) acc=0;
     if(ghostData) placeGhost(state==='finished'?cpTimes[cpTimes.length-1]+ (finishTimer):raceTime);
     if(state==='finished'){ finishTimer+=dt; if(finishTimer>1.6&&$('#results').hidden) showResults(); }
-    syncCarMesh(); updateHUD(); drawMinimap();
+    syncCarMesh(); updateHUD(); drawMinimap(); updateTyreFx(dt);
   }
   if(state!=='paused'){ updateCamera(dt); renderer.render(scene,camera); }
   updateAudio();
@@ -1056,7 +1164,7 @@ function refreshSettings(){
     cl.appendChild(b); });
   const shown=carById(selCar||s.car), locked=!carUnlocked(shown);
   $('#carBlurb').innerHTML=`<b>${shown.name}</b>${locked?' <span class="lock">Locked · win a gold medal on any track</span>':''} — ${shown.blurb}`;
-  const stats=[['Top speed',shown.max/77,Math.round(shown.max*3.6)+' km/h'],['Acceleration',shown.acc/31,''],['Braking',shown.brk/54,''],['Grip',shown.grip/11,''],['Steering',shown.steer/2.8,'']];
+  const stats=[['Top speed',shown.max/77,Math.round(shown.max*3.6)+' km/h'],['Acceleration',shown.acc/31,''],['Braking',shown.brk/54,''],['Grip',shown.grip/11,''],['Steering',shown.steer/2.8,''],['Drift',Math.min(1,shown.keep*(1.6/shown.hb)/1.6),'']];
   $('#carStats').innerHTML=stats.map(([n,v,t])=>`<span class="lbl">${n}</span><span class="bar"><i style="width:${Math.round(v*100)}%"></i></span><span class="sv">${t}</span>`).join('');
   selCar=null;
   const sw=$('#swatches'); sw.innerHTML='';
@@ -1108,7 +1216,7 @@ $('#eraseBtn').onclick=()=>{
 function pause(){ if(state!=='racing'&&state!=='countdown') return; pausedFrom=state; state='paused'; $('#pause').hidden=false; $('#resumeBtn').focus(); }
 let pausedFrom='racing';
 function resume(){ if(state!=='paused') return; $('#pause').hidden=true; state=pausedFrom; last=performance.now(); acc=0; initAudio(); }
-function toMenu(){ hideAll(); refreshSettings(); state='menu'; $('#hud').hidden=true; $('#touch').hidden=true; ghostMesh.visible=false; placeCarAtStart(); refreshTrackList(); $('#menu').hidden=false; }
+function toMenu(){ hideAll(); refreshSettings(); clearTyreFx(); state='menu'; $('#hud').hidden=true; $('#touch').hidden=true; ghostMesh.visible=false; placeCarAtStart(); refreshTrackList(); $('#menu').hidden=false; }
 function showResults(){
   const R=lastResult; if(!R) return;
   $('#resTrack').textContent=trackDef.name;
@@ -1166,11 +1274,14 @@ requestAnimationFrame(t=>{ last=t; frame(t); });
 
 // debug hooks (used for automated testing)
 window.__apex={get state(){return state;},get car(){return car;},get raceTime(){return raceTime;},get fps(){return fps;},get save(){return save;},get track(){return T;},
-  setAuto(v,margin){autopilot=!!v; if(margin) autoMargin=margin;},
-  sim(sec){ if(state==='countdown'){ countdown=99; state='racing'; $('#lights').hidden=true; }
-    let hits=0, maxLat=0, stuck=0; const n=Math.round(sec/STEP);
-    for(let i=0;i<n&&state==='racing';i++){ step(STEP); maxLat=Math.max(maxLat,Math.abs(car.lat)); if(car.scrape>0.09) hits++; if(Math.abs(car.vf)<1) stuck++; }
-    return {state,raceTime,cp:cpTimes.length,laps:lapTimes.slice(),hits,maxLat,stuckSteps:stuck,prog:car.prog}; },
+  setEdge(v){DRIFT_EDGE=v;},
+  setAuto(v,margin,drift){autopilot=!!v; if(margin) autoMargin=margin; autoDrift=Object.assign({on:false,entry:4,angle:0.35,over:8},drift||{});},
+  sim(sec,fx){ if(state==='countdown'){ countdown=99; state='racing'; $('#lights').hidden=true; }
+    let hits=0, maxLat=0, stuck=0, drifts=0, spins=0; const n=Math.round(sec/STEP);
+    for(let i=0;i<n&&state==='racing';i++){ step(STEP); maxLat=Math.max(maxLat,Math.abs(car.lat)); if(car.scrape>0.09) hits++; if(fx&&i%4===0) updateTyreFx(STEP*4); if(car.drift) drifts++; if(car.spin>0) spins++; if(Math.abs(car.vf)<1) stuck++; }
+    return {state,raceTime,cp:cpTimes.length,laps:lapTimes.slice(),hits,maxLat,stuckSteps:stuck,driftSec:drifts*STEP,spinSec:spins*STEP,prog:car.prog}; },
   startRun, toMenu, loadTrack, get lastResult(){return lastResult;}, info(){return renderer.info.render;}};
 })();
 </script>
+
+</body></html>
