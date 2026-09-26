@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Penalty Showdown</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0e1a;
+    --panel: #161b33;
+    --panel-hi: #2a3160;
+    --panel-lo: #0f1326;
+    --ink: #f4f4f4;
+    --muted: #8b93b8;
+    --accent: #ffd23f;
+    --goal: #3ddc84;
+    --miss: #ff4d5e;
+    --p1: #e84a5f;
+    --p2: #3d9bff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Press Start 2P", ui-monospace, monospace; font-size: 11px; line-height: 1.7;
+    min-height: 100vh; display: flex; justify-content: center;
+    background-image: radial-gradient(#1a2040 1px, transparent 1px); background-size: 8px 8px;
+    -webkit-font-smoothing: none;
+  }
+  #app { width: 100%; max-width: 980px; padding: 16px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+  h1 { margin: 0; font-size: 20px; line-height: 1.3; text-shadow: 3px 3px 0 #000; }
+  h1 span { color: var(--accent); }
+
+  .panel {
+    background: var(--panel); margin: 4px 4px 14px; padding: 12px 14px;
+    box-shadow: 0 0 0 4px #000, inset 0 0 0 2px var(--panel-hi);
+  }
+  .srow { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
+  .sname { width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 2px 2px 0 #000; }
+  .dots { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
+  .dot { width: 14px; height: 14px; background: #0f1326; box-shadow: 0 0 0 2px #000, inset 2px 2px 0 #000; }
+  .dot.g { background: var(--goal); box-shadow: 0 0 0 2px #000, inset -2px -2px 0 #1d8a50; }
+  .dot.m { background: var(--miss); box-shadow: 0 0 0 2px #000, inset -2px -2px 0 #9b2030; }
+  .stotal { font-size: 18px; width: 34px; text-align: right; color: var(--accent); text-shadow: 2px 2px 0 #000; }
+
+  #status { color: var(--muted); margin: 0 4px 10px; min-height: 18px; font-size: 10px; }
+  #status b { color: var(--ink); font-weight: normal; }
+
+  #stagewrap { text-align: center; margin: 0 4px; }
+  #stage { display: inline-block; position: relative; line-height: 0; box-shadow: 0 0 0 4px #000, 0 0 0 8px var(--panel-hi), 0 0 0 12px #000; }
+  #stage::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,.14) 0 2px, transparent 2px 4px);
+  }
+  canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; image-rendering: crisp-edges; }
+  canvas.aiming { cursor: crosshair; }
+
+  #controls { margin-top: 22px; min-height: 130px; }
+  .hint { color: var(--muted); margin-bottom: 10px; font-size: 10px; }
+  .hint b, .key { color: var(--accent); font-weight: normal; }
+  .meter { display: flex; gap: 3px; padding: 4px; background: #000; }
+  .seg { flex: 1; height: 26px; background: #232845; }
+  .meter-labels { display: flex; justify-content: space-between; font-size: 8px; color: var(--muted); margin-top: 6px; }
+  .meter-labels .danger { color: var(--miss); }
+  .row { display: flex; gap: 14px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+  .pval { font-size: 18px; min-width: 80px; color: var(--accent); text-shadow: 2px 2px 0 #000; }
+
+  button {
+    font-family: inherit; font-size: 11px; color: var(--ink); background: var(--panel-hi);
+    border: 0; padding: 12px 14px; margin: 3px; cursor: pointer; line-height: 1.4;
+    box-shadow: 0 0 0 3px #000, inset -3px -3px 0 #151a38, inset 3px 3px 0 #4a55a0;
+    user-select: none; -webkit-user-select: none; touch-action: none;
+  }
+  button:hover:not(:disabled) { filter: brightness(1.2); }
+  button:active:not(:disabled), button.held { transform: translateY(2px); filter: brightness(1.4); }
+  button:disabled { opacity: .35; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: #1a1a1a; box-shadow: 0 0 0 3px #000, inset -3px -3px 0 #c79a00, inset 3px 3px 0 #fff3b0; }
+  #muteBtn { font-size: 9px; padding: 8px 10px; }
+
+  .ctl-list { margin: 0 0 12px; padding: 0; list-style: none; font-size: 10px; color: var(--muted); }
+  .ctl-list li { margin-bottom: 6px; }
+  .pad-wrap { display: flex; gap: 22px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .pad { display: grid; grid-template-columns: repeat(3, 58px); grid-template-rows: repeat(2, 50px); gap: 6px; }
+  .pad button { margin: 0; padding: 0; font-size: 16px; }
+  .pad .u { grid-column: 2; grid-row: 1; }
+  .pad .l { grid-column: 1; grid-row: 1 / span 2; }
+  .pad .r { grid-column: 3; grid-row: 1 / span 2; }
+  .pad .d { grid-column: 2; grid-row: 2; }
+  .act { width: 150px; height: 106px; font-size: 14px; margin: 0; }
+  .result-big { font-size: 26px; text-shadow: 3px 3px 0 #000; }
+  .result-big.goal { color: var(--goal); }
+  .result-big.miss { color: var(--miss); }
+  .result-detail { color: var(--muted); margin: 8px 0 12px; font-size: 10px; }
+
+  #overlay {
+    position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center;
+    padding: 16px; z-index: 10;
+    background-image: radial-gradient(#1a2040 1px, transparent 1px); background-size: 8px 8px;
+  }
+  #overlay.hidden { display: none; }
+  .card {
+    background: var(--panel); padding: 26px 22px; max-width: 480px; width: 100%; text-align: center;
+    box-shadow: 0 0 0 4px #000, inset 0 0 0 3px var(--panel-hi), 8px 8px 0 4px #000;
+  }
+  .card h2 { margin: 0 0 14px; font-size: 16px; line-height: 1.6; color: var(--accent); text-shadow: 2px 2px 0 #000; }
+  .card p { color: var(--muted); line-height: 1.9; margin: 0 0 18px; font-size: 10px; }
+  .card p b { color: var(--ink); font-weight: normal; }
+  .card .big { font-size: 30px; margin-bottom: 12px; line-height: 1.2; }
+  .card input {
+    width: 100%; font: inherit; font-size: 11px; padding: 10px; margin-bottom: 12px;
+    border: 0; background: #000; color: var(--ink); box-shadow: inset 0 0 0 2px var(--panel-hi);
+  }
+  .card input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
+  .card label { display: block; text-align: left; font-size: 9px; color: var(--muted); margin-bottom: 6px; }
+  .card .rules { text-align: left; font-size: 9px; color: var(--muted); margin: 6px 0 18px; padding-left: 16px; line-height: 1.9; }
+  .card button { width: calc(100% - 6px); padding: 14px; font-size: 12px; margin-top: 8px; }
+
+  @media (max-width: 560px) {
+    h1 { font-size: 14px; }
+    .sname { width: 90px; font-size: 9px; }
+    .result-big { font-size: 18px; }
+    .pad { grid-template-columns: repeat(3, 52px); }
+    .act { width: 120px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>PENALTY <span>SHOWDOWN</span></h1>
+    <button id="muteBtn">SOUND ON</button>
+  </header>
+  <div id="scoreboard" class="panel"></div>
+  <div id="status"></div>
+  <div id="stagewrap"><div id="stage"><canvas id="pitch" width="320" height="192"></canvas></div></div>
+  <div id="controls" class="panel"></div>
+</div>
+<div id="overlay"></div>
+
+<script>
+// ============ setup ============
+const cv = document.getElementById('pitch');
+const ctx = cv.getContext('2d');
+const W = 320, H = 192;
+const G = { l: 68, r: 252, t: 40, b: 116 };   // goal mouth
+const SPOT = { x: 160, y: 170 };
+const SHOOTER_START = { x: 134, y: 190 }, SHOOTER_END = { x: 151, y: 178 };
+const COLORS = ['#e84a5f', '#3d9bff'];
+const DARK = ['#7a1a2a', '#1b4a86'];
+const SKIN = '#d9a066', HAIR = '#3b2412', OUT = '#0b0b12';
+
+const state = {
+  players: ['Player 1', 'Player 2'],
+  kicks: [[], []],
+  kickIndex: 0,
+  phase: 'setup',     // setup | handoff | aim | ready | live | result | over
+  aim: null, power: 0, powerDir: 1, powerLocked: false,
+  live: null, outcome: null,
+  cheerUntil: 0, shakeUntil: 0, shakeMag: 0,
+};
+const keys = { left: false, right: false, up: false, down: false };
+let K; // keeper
+
+const kicker = () => state.kickIndex % 2;
+const keeper = () => 1 - kicker();
+const nameOf = i => state.players[i];
+
+// ============ helpers ============
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function randn() {
+  let u = 0, v = 0;
+  while (!u) u = Math.random();
+  while (!v) v = Math.random();
+  return clamp(Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v), -2.5, 2.5);
+}
+const toScreen = (nx, ny) => ({ x: 160 + nx * (G.r - G.l) / 2, y: G.b - ny * (G.b - G.t) });
+const toNorm = (x, y) => ({ x: (x - 160) / ((G.r - G.l) / 2), y: (G.b - y) / (G.b - G.t) });
+function distToSeg(px, py, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy;
+  const t = L ? clamp(((px - a.x) * dx + (py - a.y) * dy) / L, 0, 1) : 0;
+  return Math.hypot(px - (a.x + dx * t), py - (a.y + dy * t));
+}
+
+// ============ sound ============
+let muted = false;
+try { muted = localStorage.getItem('pens-muted') === '1'; } catch (e) {}
+const sfx = (() => {
+  let ac = null;
+  const get = () => {
+    if (muted) return null;
+    if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+    if (ac.state === 'suspended') ac.resume();
+    return ac;
+  };
+  function tone(f, d, { type = 'square', vol = 0.05, to = null, delay = 0 } = {}) {
+    const a = get(); if (!a) return;
+    const t = a.currentTime + delay, o = a.createOscillator(), g = a.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g).connect(a.destination); o.start(t); o.stop(t + d + 0.02);
+  }
+  function noise(d, vol = 0.06, delay = 0, freq = 1000) {
+    const a = get(); if (!a) return;
+    const t = a.currentTime + delay, buf = a.createBuffer(1, Math.floor(a.sampleRate * d), a.sampleRate);
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
+    const s = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+    s.buffer = buf; f.type = 'bandpass'; f.frequency.value = freq;
+    g.gain.setValueAtTime(vol, t); g.gain.linearRampToValueAtTime(0.0001, t + d);
+    s.connect(f).connect(g).connect(a.destination); s.start(t);
+  }
+  return {
+    blip: () => tone(880, 0.05, { vol: 0.03 }),
+    lock: () => { tone(660, 0.07); tone(990, 0.1, { delay: 0.07 }); },
+    whistle: () => { tone(2300, 0.1, { type: 'sine', vol: 0.05 }); tone(2300, 0.4, { type: 'sine', vol: 0.05, delay: 0.14 }); },
+    step: () => tone(90, 0.04, { vol: 0.04, type: 'triangle' }),
+    kick: () => { tone(200, 0.14, { to: 45, vol: 0.12 }); noise(0.05, 0.1, 0, 700); },
+    jump: () => tone(260, 0.14, { to: 620, vol: 0.04 }),
+    save: () => { tone(240, 0.1, { to: 100, vol: 0.1 }); noise(0.7, 0.06, 0.05, 700); },
+    post: () => { tone(1400, 0.3, { type: 'triangle', vol: 0.08 }); tone(1870, 0.35, { type: 'triangle', vol: 0.05 }); },
+    goal: () => { [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.14, { delay: i * 0.09 })); noise(1.6, 0.08, 0.05, 1100); },
+    miss: () => { [392, 330, 262, 196].forEach((f, i) => tone(f, 0.16, { delay: i * 0.12 })); noise(0.8, 0.04, 0, 500); },
+    win: () => { [523, 659, 784, 1046, 784, 1046, 1318].forEach((f, i) => tone(f, 0.16, { delay: i * 0.12, vol: 0.06 })); },
+  };
+})();
+const muteBtn = document.getElementById('muteBtn');
+function syncMute() { muteBtn.textContent = muted ? 'SOUND OFF' : 'SOUND ON'; }
+muteBtn.onclick = () => {
+  muted = !muted; syncMute();
+  try { localStorage.setItem('pens-muted', muted ? '1' : '0'); } catch (e) {}
+  if (!muted) sfx.blip();
+};
+syncMute();
+
+// ============ pixel drawing primitives ============
+function rect(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }
+function disc(cx, cy, r, c) {
+  ctx.fillStyle = c; cx = Math.round(cx); cy = Math.round(cy); r = Math.round(r);
+  for (let dy = -r; dy <= r; dy++) {
+    const w = Math.floor(Math.sqrt(r * r - dy * dy) + 0.4);
+    ctx.fillRect(cx - w, cy + dy, w * 2 + 1, 1);
+  }
+}
+function seg(x0, y0, x1, y1, r, c) {
+  ctx.fillStyle = c;
+  const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0)));
+  const s = Math.max(1, Math.round(r * 2));
+  for (let i = 0; i <= n; i++) {
+    const x = x0 + (x1 - x0) * i / n, y = y0 + (y1 - y0) * i / n;
+    ctx.fillRect(Math.round(x - s / 2), Math.round(y - s / 2), s, s);
+  }
+}
+function drawText(t, x, y, size, color, align = 'center') {
+  ctx.font = `${size}px "Press Start 2P", monospace`;
+  ctx.textAlign = align; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#000';
+  for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [2, 2], [1, 2], [2, 1]]) ctx.fillText(t, x + dx, y + dy);
+  ctx.fillStyle = color; ctx.fillText(t, x, y);
+}
+
+// ============ scenery ============
+const crowd = [];
+const CROWD_COLS = ['#e84a5f', '#ffd23f', '#3d9bff', '#f4f4f4', '#ff8c1a', '#b16cff', '#3ddc84'];
+const CROWD_SKIN = ['#d9a066', '#8d5524', '#f1c27d', '#c68642', '#5c3a1e'];
+for (let y = 2; y < 24; y += 5) {
+  for (let x = (y % 10 === 2 ? 0 : 3); x < W; x += 6) {
+    if (Math.random() < 0.88) crowd.push({
+      x, y, c: CROWD_COLS[(Math.random() * CROWD_COLS.length) | 0],
+      s: CROWD_SKIN[(Math.random() * CROWD_SKIN.length) | 0], ph: Math.random() * 6,
+    });
+  }
+}
+
+function drawBackground(now) {
+  // stands
+  rect(0, 0, W, 28, '#141a33');
+  for (let y = 6; y < 28; y += 5) rect(0, y, W, 1, '#0d1226');
+  const cheering = now < state.cheerUntil;
+  for (const p of crowd) {
+    const bob = cheering ? (Math.sin(now / 70 + p.ph) > 0 ? -2 : 0) : (Math.sin(now / 600 + p.ph) > 0.95 ? -1 : 0);
+    rect(p.x + 1, p.y + bob, 2, 2, p.s);
+    rect(p.x, p.y + 2 + bob, 4, 2, p.c);
+    if (cheering && bob) { rect(p.x - 1, p.y - 1 + bob, 1, 2, p.s); rect(p.x + 4, p.y - 1 + bob, 1, 2, p.s); }
+  }
+  // scrolling LED ad board
+  rect(0, 28, W, 12, '#000');
+  rect(0, 29, W, 10, '#101628');
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 29, W, 10); ctx.clip();
+  ctx.font = '8px "Press Start 2P", monospace'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  const msg = '+ PENALTY SHOWDOWN + KEEP YOUR NERVE + ';
+  const tw = ctx.measureText(msg).width || 300;
+  const off = -((now / 30) % tw);
+  ctx.fillStyle = cheering && Math.floor(now / 150) % 2 ? '#3ddc84' : '#ffd23f';
+  for (let x = off; x < W; x += tw) ctx.fillText(msg, Math.round(x), 35);
+  ctx.restore();
+
+  // grass bands
+  const top = 40, bands = 8;
+  for (let i = 0; i < bands; i++) {
+    const y0 = Math.round(top + (H - top) * Math.pow(i / bands, 1.25));
+    const y1 = Math.round(top + (H - top) * Math.pow((i + 1) / bands, 1.25));
+    rect(0, y0, W, y1 - y0, i % 2 ? '#2f8f45' : '#27793a');
+  }
+  // grass texture specks
+  ctx.fillStyle = '#23703a';
+  for (let i = 0; i < 90; i++) ctx.fillRect((i * 97) % W, 44 + ((i * 53) % (H - 46)), 1, 1);
+
+  // pitch markings
+  const L = '#e8f5e9';
+  rect(0, G.b, W, 1, L);
+  seg(G.l - 22, G.b, G.l - 36, 140, 0.5, L);
+  seg(G.r + 22, G.b, G.r + 36, 140, 0.5, L);
+  rect(G.l - 36, 140, G.r - G.l + 72, 1, L);
+  seg(14, G.b, -12, H, 0.5, L);
+  seg(W - 14, G.b, W + 12, H, 0.5, L);
+  rect(SPOT.x - 2, SPOT.y + 4, 5, 1, L);
+}
+
+function drawNet(now) {
+  rect(G.l, G.t, G.r - G.l, G.b - G.t, 'rgba(0,0,0,.28)');
+  ctx.fillStyle = 'rgba(255,255,255,.3)';
+  const L = state.live;
+  const ripple = L && L.netHitAt && now - L.netHitAt < 500 ? L.ball : null;
+  for (let x = G.l; x < G.r; x += 4) ctx.fillRect(x, G.t, 1, G.b - G.t);
+  for (let y = G.t; y < G.b; y += 4) ctx.fillRect(G.l, y, G.r - G.l, 1);
+  if (ripple) { // net bulge where the ball hit
+    rect(ripple.hitX - 7, ripple.hitY - 7, 15, 15, 'rgba(0,0,0,.3)');
+  }
+  // side netting depth
+  ctx.fillStyle = 'rgba(255,255,255,.4)';
+  seg(G.l, G.t, G.l + 10, G.t + 8, 0.5, 'rgba(255,255,255,.4)');
+  seg(G.r, G.t, G.r - 10, G.t + 8, 0.5, 'rgba(255,255,255,.4)');
+  rect(G.l + 10, G.t + 8, G.r - G.l - 20, 1, 'rgba(255,255,255,.4)');
+}
+
+function drawPosts() {
+  rect(G.l - 4, G.t - 4, 4, G.b - G.t + 5, OUT);
+  rect(G.r, G.t - 4, 4, G.b - G.t + 5, OUT);
+  rect(G.l - 4, G.t - 4, G.r - G.l + 8, 4, OUT);
+  rect(G.l - 3, G.t - 3, 3, G.b - G.t + 3, '#ffffff');
+  rect(G.r + 1, G.t - 3, 3, G.b - G.t + 3, '#ffffff');
+  rect(G.l - 3, G.t - 3, G.r - G.l + 6, 3, '#ffffff');
+  rect(G.l - 1, G.t, 1, G.b - G.t, '#b9c2cc');
+  rect(G.r + 3, G.t, 1, G.b - G.t, '#b9c2cc');
+  rect(G.l, G.t - 1, G.r - G.l, 1, '#b9c2cc');
+}
+
+// ============ keeper ============
+function resetKeeper() {
+  K = { x: 160, h: 0, vx: 0, vy: 0, mode: 'ground', ang: 0, targetAng: 0, arms: 'side', walk: 0, moved: false, diveDir: 0, actAt: 0, lastStep: 0 };
+}
+resetKeeper();
+
+function keeperCenter() {
+  const rest = 20 * Math.abs(Math.cos(K.ang)) + 7 * Math.abs(Math.sin(K.ang));
+  return { x: K.x, y: G.b - rest - K.h };
+}
+function keeperXform() {
+  const c = keeperCenter(), cs = Math.cos(K.ang), sn = Math.sin(K.ang);
+  return (lx, ly) => ({ x: c.x + lx * cs - ly * sn, y: c.y + lx * sn + ly * cs });
+}
+function keeperShapes() {
+  const arms = K.arms === 'up'
+    ? [[-4, -12, -5, -29, 3.5], [4, -12, 5, -29, 3.5]]
+    : [[-6, -10, -16, -17, 3.5], [6, -10, 16, -17, 3.5]];
+  return [[0, -14, 0, 6, 6.5], [0, 6, 0, 21, 4.5], [0, -19, 0, -19, 4.5], ...arms];
+}
+function keeperHits(bx, by, br) {
+  const T = keeperXform();
+  for (const s of keeperShapes()) {
+    const a = T(s[0], s[1]), b = T(s[2], s[3]);
+    if (distToSeg(bx, by, a, b) < s[4] + br) return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+  return null;
+}
+
+function keeperAction(now) {
+  if (state.phase !== 'live' || K.mode !== 'ground') return;
+  const dir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+  K.mode = 'air'; K.arms = 'up'; K.moved = true; K.diveDir = dir; K.actAt = now;
+  if (!dir) { K.vy = 178; K.vx = 0; K.targetAng = 0; }                              // straight up
+  else if (keys.up) { K.vy = 185; K.vx = dir * 125; K.targetAng = dir * 0.7; }        // high dive
+  else if (keys.down) { K.vy = 75; K.vx = dir * 190; K.targetAng = dir * 1.5; }       // low dive
+  else { K.vy = 135; K.vx = dir * 162; K.targetAng = dir * 1.15; }                    // normal dive
+  sfx.jump();
+}
+
+function updateKeeper(dt, now) {
+  const canControl = state.phase === 'live';
+  const dir = canControl ? (keys.right ? 1 : 0) - (keys.left ? 1 : 0) : 0;
+  if (K.mode === 'ground') {
+    K.arms = 'side';
+    if (dir) {
+      K.x += dir * 95 * dt; K.walk += dt; K.moved = true;
+      if (now - K.lastStep > 170) { K.lastStep = now; sfx.step(); }
+    }
+  } else if (K.mode === 'air') {
+    K.x += K.vx * dt; K.h += K.vy * dt; K.vy -= 430 * dt;
+    const da = K.targetAng - K.ang;
+    K.ang += Math.sign(da) * Math.min(Math.abs(da), 10 * dt);
+    if (K.h <= 0 && K.vy < 0) {
+      K.h = 0; K.vy = 0;
+      if (K.targetAng) { K.mode = 'down'; K.ang = K.targetAng; K.vx *= 0.4; }
+      else { K.mode = 'ground'; K.vx = 0; }
+    }
+  } else if (K.mode === 'down') {
+    K.x += K.vx * dt;
+    K.vx = Math.sign(K.vx) * Math.max(0, Math.abs(K.vx) - 500 * dt);
+  }
+  K.x = clamp(K.x, G.l - 16, G.r + 16);
+}
+
+function drawKeeper() {
+  const T = keeperXform();
+  const col = COLORS[keeper()], dk = DARK[keeper()];
+  const walking = K.mode === 'ground' && state.phase === 'live' && keys.left !== keys.right;
+  const st = walking ? (Math.floor(K.walk * 12) % 2 ? 1 : -1) : 0;
+  const lL = 19 - (st > 0 ? 3 : 0), rL = 19 - (st < 0 ? 3 : 0);
+  const arms = K.arms === 'up'
+    ? [['s', -4, -12, -5, -26, 2, col], ['s', 4, -12, 5, -26, 2, col], ['d', -5, -29, 3, '#f4f4f4'], ['d', 5, -29, 3, '#f4f4f4']]
+    : [['s', -6, -10, -14, -16, 2, col], ['s', 6, -10, 14, -16, 2, col], ['d', -16, -17, 3, '#f4f4f4'], ['d', 16, -17, 3, '#f4f4f4']];
+  const parts = [
+    ['s', -3, 6, -4, lL, 2, dk], ['s', 3, 6, 4, rL, 2, dk],
+    ['d', -4, lL + 1, 2, '#222'], ['d', 4, rL + 1, 2, '#222'],
+    ['s', 0, 1, 0, 6, 5, '#20242e'],
+    ['s', 0, -12, 0, 1, 6, col],
+    ...arms,
+    ['d', 0, -19, 4, SKIN],
+  ];
+  // shadow
+  if (K.h < 30) rect(K.x - 9 + K.h / 5, G.b, 18 - K.h / 2.5, 2, 'rgba(0,0,0,.3)');
+  for (const pass of [0, 1]) {
+    for (const p of parts) {
+      if (p[0] === 's') {
+        const a = T(p[1], p[2]), b = T(p[3], p[4]);
+        seg(a.x, a.y, b.x, b.y, p[5] + (pass ? 0 : 1), pass ? p[6] : OUT);
+      } else {
+        const a = T(p[1], p[2]);
+        disc(a.x, a.y, p[3] + (pass ? 0 : 1), pass ? p[4] : OUT);
+      }
+    }
+  }
+  // hair + shirt number + glove stripe details
+  const h1 = T(-3, -22), h2 = T(3, -22); seg(h1.x, h1.y, h2.x, h2.y, 1, HAIR);
+  const n1 = T(0, -9), n2 = T(0, -4); seg(n1.x, n1.y, n2.x, n2.y, 0.5, '#fff');
+}
+
+// ============ shooter ============
+function shooterState(now) {
+  const L = state.live;
+  if (!L || now < L.runStart) return { ...SHOOTER_START, pose: 'stand' };
+  if (!L.kicked && now < L.kickAt) {
+    const t = (now - L.runStart) / (L.kickAt - L.runStart);
+    return { x: lerp(SHOOTER_START.x, SHOOTER_END.x, t), y: lerp(SHOOTER_START.y, SHOOTER_END.y, t), pose: Math.floor(now / 90) % 2 ? 'run0' : 'run1' };
+  }
+  return { ...SHOOTER_END, pose: now - L.kickAt < 450 ? 'kick' : 'stand' };
+}
+function drawShooter(now) {
+  const s = shooterState(now), fx = Math.round(s.x), fy = Math.round(s.y);
+  const col = COLORS[kicker()], dk = DARK[kicker()];
+  const legs = {
+    stand: [[-4, -8, 3, 8, dk], [1, -8, 3, 8, dk]],
+    run0: [[-4, -9, 3, 8, dk], [1, -7, 3, 6, dk]],
+    run1: [[-4, -7, 3, 6, dk], [1, -9, 3, 8, dk]],
+    kick: [[-4, -8, 3, 8, dk], [2, -11, 3, 5, dk], [4, -10, 5, 3, dk]],
+  }[s.pose];
+  const sw = s.pose === 'run0' ? 1 : s.pose === 'run1' ? -1 : 0;
+  const arms = s.pose === 'kick'
+    ? [[-10, -20, 5, 2, col], [5, -20, 2, 7, col]]
+    : [[-7, -20 + sw, 2, 8, col], [5, -20 - sw, 2, 8, col]];
+  const parts = [...legs, [-5, -12, 10, 5, '#f4f4f4'], [-5, -21, 10, 10, col], ...arms, [-3, -27, 6, 6, HAIR]];
+  rect(fx - 7, fy, 14, 2, 'rgba(0,0,0,.3)');
+  for (const p of parts) rect(fx + p[0] - 1, fy + p[1] - 1, p[2] + 2, p[3] + 2, OUT);
+  for (const p of parts) rect(fx + p[0], fy + p[1], p[2], p[3], p[4]);
+  rect(fx - 1, fy - 19, 2, 5, '#fff'); // shirt number
+}
+
+// ============ ball ============
+function drawBall(x, y, r, alpha = 1, shadowY = null) {
+  const R = Math.max(2, Math.round(r));
+  if (shadowY !== null) rect(x - R, shadowY, R * 2 + 1, 1, 'rgba(0,0,0,.35)');
+  ctx.globalAlpha = alpha;
+  disc(x, y, R + 1, OUT);
+  disc(x, y, R, '#ffffff');
+  if (R >= 3) { rect(Math.round(x) - 1, Math.round(y) - 1, 2, 2, '#222'); rect(Math.round(x) + 1, Math.round(y) + 1, 1, 1, '#999'); }
+  else rect(Math.round(x), Math.round(y), 1, 1, '#555');
+  ctx.globalAlpha = 1;
+}
+function flightPos(B, e) {
+  const k = 1 - Math.pow(1 - e, 1.3);
+  return {
+    x: lerp(B.from.x, B.to.x, k),
+    y: lerp(B.from.y, B.to.y, k) - Math.sin(Math.PI * e) * B.arc,
+    r: lerp(4, 2.5, e),
+    shadow: Math.round(lerp(SPOT.y + 4, G.b + 1, k)),
+  };
+}
+
+// ============ shot plan & live play ============
+function planShot() {
+  const p = state.power / 100, aim = state.aim;
+  const spread = 0.03 + Math.pow(p, 3) * 0.28;
+  const ax = aim.x + randn() * spread * 0.6;
+  let ay = aim.y + randn() * spread * 0.5;
+  if (p > 0.85) ay += ((p - 0.85) / 0.15) * 0.28 * Math.random(); // blasting it tends to rise
+  ay = Math.max(0.05, ay);
+  let kind = 'on', sub = '', end = toScreen(ax, ay);
+  if (Math.abs(ax) > 1.07 || ay > 1.09) {
+    kind = 'wide'; sub = (ay > 1.09 && Math.abs(ax) <= 1.07) ? 'over' : 'wide';
+  } else if (Math.abs(ax) > 1 || ay > 1) {
+    kind = 'post'; sub = (ay > 1 && Math.abs(ax) <= 1) ? 'bar' : 'post';
+    end = { x: Math.abs(ax) > 1 ? (ax < 0 ? G.l - 2 : G.r + 2) : end.x, y: ay > 1 ? G.t - 2 : end.y };
+  }
+  return { kind, sub, end, ax, ay, dur: lerp(1500, 430, Math.pow(p, 0.85)), arc: lerp(16, 4, p) };
+}
+
+function startLive() {
+  if (state.phase !== 'ready') return;
+  const now = performance.now();
+  state.phase = 'live';
+  clearKeys(); resetKeeper();
+  const runStart = now + 1000 + Math.random() * 1600;   // unpredictable run-up start
+  state.live = { start: now, runStart, kickAt: runStart + 650, kicked: false, ball: null, resolvedAt: 0, plan: planShot() };
+  sfx.whistle();
+  renderControls(); renderStatus();
+}
+
+function kick(now) {
+  const L = state.live;
+  L.kicked = true; L.kickAt = now;
+  L.ball = { state: 'flight', t0: now, dur: L.plan.dur, from: { ...SPOT }, to: L.plan.end, arc: L.plan.arc, kind: L.plan.kind, x: SPOT.x, y: SPOT.y, r: 4 };
+  sfx.kick(); shake(now, 150, 1);
+}
+
+function startRebound(B, now, from, towardX) {
+  const side = towardX !== undefined ? towardX : (Math.random() < 0.5 ? -1 : 1);
+  B.state = 'rebound';
+  B.rb = { from: { x: B.x, y: B.y }, to: { x: clamp(B.x + side * (25 + Math.random() * 50), 8, W - 8), y: 135 + Math.random() * 40 }, t0: now, dur: 650 };
+}
+
+function updateBall(now) {
+  const L = state.live, B = L.ball;
+  if (B.state === 'flight') {
+    const e = Math.min(1, (now - B.t0) / B.dur);
+    const p = flightPos(B, e);
+    B.x = p.x; B.y = p.y; B.r = p.r; B.shadow = p.shadow;
+    if (e >= 0.82 && B.kind !== 'wide') {
+      const hit = keeperHits(B.x, B.y, B.r + 0.5);
+      if (hit) {
+        startRebound(B, now, hit, Math.sign(B.x - hit.x) || (B.x < 160 ? -1 : 1));
+        resolve('save', now);
+        return;
+      }
+    }
+    if (e >= 1) {
+      if (B.kind === 'on') { B.state = 'net'; B.t1 = now; B.hitX = B.x; B.hitY = B.y; L.netHitAt = now; resolve('goal', now); }
+      else if (B.kind === 'post') { startRebound(B, now, null, B.x < 160 ? 1 : -1); resolve('post', now); }
+      else { B.state = 'away'; B.t1 = now; B.fx = B.x; B.fy = B.y; resolve('miss', now); }
+    }
+  } else if (B.state === 'rebound') {
+    const k = Math.min(1, (now - B.rb.t0) / B.rb.dur), ek = 1 - Math.pow(1 - k, 2);
+    B.x = lerp(B.rb.from.x, B.rb.to.x, ek);
+    B.y = lerp(B.rb.from.y, B.rb.to.y, ek) - Math.sin(Math.PI * k) * 22;
+    B.r = lerp(2.5, 4, k);
+    B.shadow = Math.round(lerp(G.b + 1, B.rb.to.y + 3, ek));
+  } else if (B.state === 'net') {
+    const k = Math.min(1, (now - B.t1) / 500);
+    B.y = lerp(B.hitY, G.b - 3, k * k); B.r = 2; B.shadow = null;
+  } else if (B.state === 'away') {
+    const k = Math.min(1, (now - B.t1) / 450);
+    const dx = B.to.x - B.from.x, dy = B.to.y - B.from.y, d = Math.hypot(dx, dy) || 1;
+    B.x = B.fx + dx / d * 40 * k; B.y = B.fy + dy / d * 40 * k; B.r = 2; B.alpha = 1 - k; B.shadow = null;
+  }
+}
+
+function resolve(kind, now) {
+  const L = state.live;
+  if (L.resolvedAt) return;
+  L.resolvedAt = now;
+  const g = nameOf(keeper()), plan = L.plan;
+  const o = { goal: false, banner: '', detail: '', color: '#ff4d5e' };
+  if (kind === 'goal') {
+    o.goal = true; o.banner = 'GOAL!'; o.color = '#3ddc84';
+    const side = plan.ax < -0.25 ? -1 : plan.ax > 0.25 ? 1 : 0;
+    if (!K.moved) o.detail = `${g} didn't even move!`;
+    else if (K.actAt && K.actAt < L.kickAt - 80) o.detail = `${g} went too early and guessed wrong!`;
+    else if (K.diveDir && side && K.diveDir !== side) o.detail = `Sent ${g} the wrong way!`;
+    else o.detail = 'Just past the fingertips!';
+    sfx.goal(); state.cheerUntil = now + 2600; shake(now, 300, 2);
+  } else if (kind === 'save') {
+    o.banner = 'SAVED!';
+    o.detail = K.targetAng ? `Full-stretch diving save by ${g}!`
+      : K.mode === 'air' ? `${g} leapt up and got a glove on it!`
+      : `${g} was in the right place at the right time!`;
+    sfx.save(); state.cheerUntil = now + 1600; shake(now, 250, 2);
+  } else if (kind === 'post') {
+    o.banner = plan.sub === 'bar' ? 'CROSSBAR!' : 'OFF THE POST!';
+    o.detail = 'Rattled the woodwork and stayed out!';
+    sfx.post(); shake(now, 200, 1);
+  } else {
+    o.banner = 'MISSED!';
+    o.detail = plan.sub === 'over' ? 'Blazed it over the bar. Too much power!' : 'Dragged it wide of the post.';
+    sfx.miss();
+  }
+  state.outcome = o;
+}
+
+function shake(now, ms, mag) { state.shakeUntil = now + ms; state.shakeMag = mag; }
+
+// ============ main draw ============
+function drawAimMarker(now) {
+  const p = toScreen(state.aim.x, state.aim.y);
+  const x = Math.round(p.x), y = Math.round(p.y);
+  for (let i = 1; i < 12; i++) { // dotted trajectory
+    const t = i / 12, d = { x: lerp(SPOT.x, x, t), y: lerp(SPOT.y, y, t) - Math.sin(Math.PI * t) * 8 };
+    if ((i + Math.floor(now / 120)) % 2) rect(d.x, d.y, 1, 1, '#ffd23f');
+  }
+  const c = Math.floor(now / 250) % 2 ? '#ffd23f' : '#fff3b0', s = 6;
+  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    rect(x + sx * s - (sx < 0 ? 0 : 2), y + sy * s - (sy < 0 ? 0 : 0), 3, 1, c);
+    rect(x + sx * s - (sx < 0 ? 0 : 0), y + sy * s - (sy < 0 ? 0 : 2), 1, 3, c);
+  }
+  rect(x, y, 1, 1, c);
+}
+
+function draw(now) {
+  ctx.save();
+  if (now < state.shakeUntil) ctx.translate(Math.round((Math.random() - 0.5) * 2 * state.shakeMag), Math.round((Math.random() - 0.5) * 2 * state.shakeMag));
+  drawBackground(now);
+  drawNet(now);
+
+  const L = state.live;
+  const B = L && L.ball;
+  if (B && B.state === 'net') drawBall(B.x, B.y, B.r);
+  drawKeeper();
+  drawPosts();
+  if (!B) drawBall(SPOT.x, SPOT.y, 4, 1, SPOT.y + 4);
+  else if (B.state !== 'net' && !(B.state === 'away' && B.alpha <= 0)) drawBall(B.x, B.y, B.r, B.alpha ?? 1, B.shadow ?? null);
+  drawShooter(now);
+
+  if (state.phase === 'aim' && state.aim) drawAimMarker(now);
+  if (state.phase === 'ready') {
+    if (Math.floor(now / 500) % 2) drawText('PRESS READY', 160, 150, 8, '#ffd23f');
+  }
+  if (L && !L.resolvedAt) {
+    if (now - L.start < 900) drawText('GET SET...', 160, 150, 8, '#ffd23f');
+    else if (!L.kicked && Math.floor(now / 200) % 2) drawText('!', 160, 150, 8, '#ff4d5e');
+  }
+  if (L && L.resolvedAt && now - L.resolvedAt > 120 && state.outcome) {
+    drawText(state.outcome.banner, 160, 76, 16, state.outcome.color);
+  }
+  ctx.restore();
+}
+
+// ============ game flow ============
+function showOverlay(html) {
+  const ov = document.getElementById('overlay');
+  ov.innerHTML = `<div class="card">${html}</div>`;
+  ov.classList.remove('hidden');
+}
+function hideOverlay() { document.getElementById('overlay').classList.add('hidden'); }
+function clearKeys() { for (const k in keys) keys[k] = false; }
+
+function showSetup() {
+  state.phase = 'setup';
+  showOverlay(`
+    <div class="big">&#9917;</div>
+    <h2>PENALTY SHOWDOWN</h2>
+    <p>2 players. 1 device. Pass it back and forth.</p>
+    <label for="n1">PLAYER 1</label><input id="n1" maxlength="14" value="${esc(state.players[0])}">
+    <label for="n2">PLAYER 2</label><input id="n2" maxlength="14" value="${esc(state.players[1])}">
+    <ul class="rules">
+      <li>SHOOTER: click the goal to aim, then stop the power meter. It speeds up near the top!</li>
+      <li>More power = faster shot, but less accurate.</li>
+      <li>KEEPER: press READY, then move and dive LIVE to block the shot.</li>
+      <li>5 kicks each, then sudden death.</li>
+    </ul>
+    <button class="primary" id="startBtn">START</button>`);
+  document.getElementById('startBtn').onclick = () => {
+    state.players = [document.getElementById('n1').value.trim() || 'Player 1', document.getElementById('n2').value.trim() || 'Player 2'];
+    sfx.lock();
+    startGame();
+  };
+}
+
+function startGame() {
+  state.kicks = [[], []];
+  state.kickIndex = 0;
+  renderScoreboard();
+  handoffToKicker();
+}
+
+function handoffToKicker() {
+  state.phase = 'handoff';
+  state.live = null; state.outcome = null;
+  resetKeeper();
+  const k = esc(nameOf(kicker())), g = esc(nameOf(keeper()));
+  showOverlay(`
+    <div class="big">&#128095;</div>
+    <h2>${k} SHOOTS</h2>
+    <p>Hand the device to <b>${k}</b>.<br><b>${g}</b>: no peeking while they aim!</p>
+    <button class="primary" id="goBtn">I'M ${k.toUpperCase()}</button>`);
+  document.getElementById('goBtn').onclick = beginAim;
+}
+
+function beginAim() {
+  hideOverlay();
+  state.phase = 'aim';
+  state.aim = null; state.power = 0; state.powerDir = 1; state.powerLocked = false;
+  renderControls(); renderStatus();
+}
+
+function lockShot() {
+  if (!state.aim || !state.powerLocked || state.phase !== 'aim') return;
+  sfx.lock();
+  state.phase = 'handoff';
+  const k = esc(nameOf(kicker())), g = esc(nameOf(keeper()));
+  showOverlay(`
+    <div class="big">&#129323;</div>
+    <h2>SHOT LOCKED IN</h2>
+    <p><b>${k}</b>, hand the device to <b>${g}</b>.<br>Keep a straight face...</p>
+    <button class="primary" id="goBtn">I'M ${g.toUpperCase()}</button>`);
+  document.getElementById('goBtn').onclick = beginKeeper;
+}
+
+function beginKeeper() {
+  hideOverlay();
+  state.phase = 'ready';
+  resetKeeper(); clearKeys();
+  renderControls(); renderStatus();
+}
+
+function finishKick() {
+  state.phase = 'result';
+  clearKeys();
+  state.kicks[kicker()].push(state.outcome.goal);
+  renderScoreboard();
+  renderControls(checkWinner());
+  renderStatus();
+}
+
+function nextKick() {
+  const w = checkWinner();
+  if (w !== null) { showGameOver(w); return; }
+  state.kickIndex++;
+  handoffToKicker();
+}
+
+function checkWinner() {
+  const [a, b] = state.kicks;
+  const ga = goals(0), gb = goals(1), ta = a.length, tb = b.length;
+  if (ta <= 5 && tb <= 5) {
+    if (ga > gb + (5 - tb)) return 0;
+    if (gb > ga + (5 - ta)) return 1;
+    return null;
+  }
+  if (ta === tb && ga !== gb) return ga > gb ? 0 : 1;
+  return null;
+}
+const goals = i => state.kicks[i].filter(Boolean).length;
+
+function showGameOver(w) {
+  state.phase = 'over';
+  sfx.win();
+  showOverlay(`
+    <div class="big">&#127942;</div>
+    <h2>${esc(nameOf(w)).toUpperCase()} WINS!</h2>
+    <p>FINAL SCORE <b>${goals(w)} - ${goals(1 - w)}</b><br>${state.kicks[0].length > 5 ? 'Decided in sudden death!' : 'What a shootout.'}</p>
+    <button class="primary" id="againBtn">REMATCH</button>
+    <button id="newBtn">NEW PLAYERS</button>`);
+  document.getElementById('againBtn').onclick = () => { state.players.reverse(); startGame(); };
+  document.getElementById('newBtn').onclick = showSetup;
+}
+
+// ============ UI ============
+function renderScoreboard() {
+  const n = Math.max(5, state.kicks[0].length, state.kicks[1].length);
+  document.getElementById('scoreboard').innerHTML = [0, 1].map(i => {
+    let dots = '';
+    for (let j = 0; j < n; j++) {
+      const k = state.kicks[i][j];
+      dots += `<div class="dot ${k === true ? 'g' : k === false ? 'm' : ''}"></div>`;
+    }
+    return `<div class="srow"><div class="sname" style="color:${COLORS[i]}">${esc(nameOf(i))}</div><div class="dots">${dots}</div><div class="stotal">${goals(i)}</div></div>`;
+  }).join('');
+}
+
+function renderStatus() {
+  const round = Math.floor(state.kickIndex / 2) + 1;
+  const label = round > 5 ? `SUDDEN DEATH R${round}` : `ROUND ${round}/5`;
+  document.getElementById('status').innerHTML =
+    `${label} &middot; <b style="color:${COLORS[kicker()]}">${esc(nameOf(kicker()))}</b> shoots &middot; <b style="color:${COLORS[keeper()]}">${esc(nameOf(keeper()))}</b> in goal`;
+  cv.classList.toggle('aiming', state.phase === 'aim');
+}
+
+const SEGS = 25;
+function renderControls(winner = null) {
+  const c = document.getElementById('controls');
+  const k = esc(nameOf(kicker())), g = esc(nameOf(keeper()));
+
+  if (state.phase === 'aim') {
+    let segs = '';
+    for (let i = 0; i < SEGS; i++) segs += '<div class="seg"></div>';
+    c.innerHTML = `
+      <div class="hint"><b>${k}:</b> 1. click the goal to aim &nbsp; 2. stop the meter (<span class="key">SPACE</span>) &nbsp; 3. lock it in</div>
+      <div class="meter" id="meter">${segs}</div>
+      <div class="meter-labels"><span>SOFT</span><span>SWEET SPOT</span><span class="danger">ROCKET (MIGHT MISS!)</span></div>
+      <div class="row">
+        <span class="pval" id="pval">0%</span>
+        <button id="powerBtn">STOP POWER</button>
+        <button class="primary" id="confirmBtn" disabled>LOCK IN SHOT</button>
+        <span class="hint" id="aimHint" style="margin:0"></span>
+      </div>`;
+    document.getElementById('powerBtn').onclick = togglePower;
+    document.getElementById('confirmBtn').onclick = lockShot;
+    updatePowerUI();
+  } else if (state.phase === 'ready') {
+    c.innerHTML = `
+      <div class="hint"><b>${g}, YOU'RE IN GOAL.</b> The shot is coming live. React!</div>
+      <ul class="ctl-list">
+        <li><span class="key">&larr; &rarr;</span> or <span class="key">A D</span> : shuffle along the line</li>
+        <li><span class="key">SPACE</span> : dive the way you're moving (jump straight up if standing still)</li>
+        <li>Hold <span class="key">&uarr;</span> while diving = HIGH dive &middot; hold <span class="key">&darr;</span> = LOW dive</li>
+        <li>The shooter can run up any moment after the whistle. Dive too early and they'll see it!</li>
+      </ul>
+      <button class="primary" id="readyBtn" style="width:calc(100% - 6px);padding:16px;font-size:14px">READY!</button>`;
+    document.getElementById('readyBtn').onclick = startLive;
+  } else if (state.phase === 'live') {
+    c.innerHTML = `
+      <div class="pad-wrap">
+        <div class="pad">
+          <button class="l" data-k="left">&#9664;</button>
+          <button class="u" data-k="up">&#9650;</button>
+          <button class="d" data-k="down">&#9660;</button>
+          <button class="r" data-k="right">&#9654;</button>
+        </div>
+        <button class="primary act" data-k="act">DIVE!</button>
+      </div>
+      <div class="hint" style="text-align:center;margin:12px 0 0"><span class="key">&larr;&rarr;</span> move &middot; <span class="key">SPACE</span> dive/jump &middot; hold <span class="key">&uarr;/&darr;</span> for high/low</div>`;
+    c.querySelectorAll('[data-k]').forEach(b => {
+      const key = b.dataset.k;
+      b.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        b.classList.add('held');
+        if (key === 'act') keeperAction(performance.now()); else keys[key] = true;
+      });
+      const up = () => { b.classList.remove('held'); if (key !== 'act') keys[key] = false; };
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, up));
+    });
+  } else if (state.phase === 'result') {
+    const o = state.outcome;
+    c.innerHTML = `
+      <div class="result-big ${o.goal ? 'goal' : 'miss'}">${esc(o.banner)}</div>
+      <div class="result-detail">${esc(o.detail)}<br>Shot power: ${Math.round(state.power)}%</div>
+      <button class="primary" id="nextBtn">${winner !== null ? 'SEE THE WINNER' : 'NEXT KICK &#9654;'}</button>`;
+    document.getElementById('nextBtn').onclick = nextKick;
+  } else {
+    c.innerHTML = '';
+  }
+}
+
+function updatePowerUI() {
+  const meter = document.getElementById('meter');
+  if (!meter) return;
+  const lit = Math.round(state.power / 100 * SEGS);
+  [...meter.children].forEach((s, i) => {
+    const hue = 120 - (i / (SEGS - 1)) * 120;
+    s.style.background = i < lit ? `hsl(${hue} 85% 55%)` : '#232845';
+  });
+  document.getElementById('pval').textContent = Math.round(state.power) + '%';
+  document.getElementById('powerBtn').textContent = state.powerLocked ? 'REDO POWER' : 'STOP POWER';
+  document.getElementById('confirmBtn').disabled = !(state.aim && state.powerLocked);
+  document.getElementById('aimHint').textContent = state.aim ? 'AIM SET (click to move it)' : 'CLICK THE GOAL TO AIM';
+}
+
+function togglePower() {
+  if (state.phase !== 'aim') return;
+  state.powerLocked = !state.powerLocked;
+  if (state.powerLocked) sfx.lock(); else sfx.blip();
+  updatePowerUI();
+}
+
+// ============ input ============
+cv.addEventListener('click', e => {
+  if (state.phase !== 'aim') return;
+  const r = cv.getBoundingClientRect();
+  const x = (e.clientX - r.left) * W / r.width, y = (e.clientY - r.top) * H / r.height;
+  if (x < G.l - 12 || x > G.r + 12 || y < G.t - 12 || y > G.b + 8) return;
+  const n = toNorm(x, y);
+  state.aim = { x: clamp(n.x, -0.97, 0.97), y: clamp(n.y, 0.05, 0.96) };
+  sfx.blip();
+  updatePowerUI();
+});
+
+const KEYMAP = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down' };
+const GAME_PHASES = ['aim', 'ready', 'live', 'result'];
+document.addEventListener('keydown', e => {
+  if (!GAME_PHASES.includes(state.phase)) return;
+  if (e.code in KEYMAP) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (e.repeat) return;
+    if (state.phase === 'aim') togglePower();
+    else if (state.phase === 'live') keeperAction(performance.now());
+  }
+  if (e.code === 'Enter' && state.phase === 'ready') { e.preventDefault(); startLive(); }
+});
+document.addEventListener('keyup', e => {
+  if (e.code in KEYMAP) keys[KEYMAP[e.code]] = false;
+  if (e.code === 'Space' && GAME_PHASES.includes(state.phase)) e.preventDefault();
+});
+// Keep keyboard focus off buttons so Space never "clicks" them by accident
+document.addEventListener('click', e => { const b = e.target.closest('button'); if (b) b.blur(); });
+window.addEventListener('blur', clearKeys);
+
+function fitCanvas() {
+  const avail = document.getElementById('stagewrap').clientWidth - 24;
+  const s = Math.floor(avail / W);
+  cv.style.width = (s >= 2 ? W * s : avail) + 'px';
+}
+window.addEventListener('resize', fitCanvas);
+
+// ============ loop ============
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+
+  if (state.phase === 'aim' && !state.powerLocked) {
+    // meter accelerates as it climbs into the hard-kick zone
+    const speed = 55 + 300 * Math.pow(state.power / 100, 2.2);
+    state.power += state.powerDir * speed * dt;
+    if (state.power >= 100) { state.power = 100; state.powerDir = -1; }
+    if (state.power <= 0) { state.power = 0; state.powerDir = 1; }
+    updatePowerUI();
+  }
+
+  const L = state.live;
+  if (L && (state.phase === 'live' || state.phase === 'result')) {
+    if (!L.kicked && now >= L.kickAt) kick(now);
+    updateKeeper(dt, now);
+    if (L.ball) updateBall(now);
+    if (state.phase === 'live' && L.resolvedAt && now - L.resolvedAt > 1500) finishKick();
+  }
+
+  draw(now);
+  requestAnimationFrame(loop);
+}
+
+fitCanvas();
+renderScoreboard();
+renderStatus();
+renderControls();
+showSetup();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
