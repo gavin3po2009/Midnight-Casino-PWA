@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wordle</title>
+<style>
+  :root {
+    --bg: #121213;
+    --text: #f8f8f8;
+    --border: #3a3a3c;
+    --border-filled: #565758;
+    --key: #818384;
+    --correct: #538d4e;
+    --present: #b59f3b;
+    --absent: #3a3a3c;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: "Helvetica Neue", Arial, sans-serif;
+  }
+  body { display: flex; flex-direction: column; align-items: center; }
+
+  header {
+    width: 100%; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 16px;
+  }
+  header h1 { margin: 0; font-size: 2rem; letter-spacing: 0.1em; }
+  header button {
+    background: none; border: 1px solid var(--border); color: var(--text);
+    padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.9rem;
+  }
+  header button:hover { background: var(--border); }
+
+  #game {
+    flex: 1; width: 100%; max-width: 500px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    padding: 12px 8px;
+  }
+
+  #board {
+    display: grid; grid-template-rows: repeat(6, 1fr); gap: 5px;
+    width: min(350px, 90vw); height: min(420px, 108vw);
+    margin: 0 auto; flex-shrink: 0;
+  }
+  .row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+  .row.shake { animation: shake 0.5s; }
+  .tile {
+    border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2rem; font-weight: bold; text-transform: uppercase;
+    user-select: none;
+  }
+  .tile.filled { border-color: var(--border-filled); animation: pop 0.1s; }
+  .tile.flip { animation: flip 0.5s ease forwards; }
+  .tile.correct { background: var(--correct); border-color: var(--correct); }
+  .tile.present { background: var(--present); border-color: var(--present); }
+  .tile.absent  { background: var(--absent);  border-color: var(--absent); }
+  .tile.win { animation: bounce 0.4s ease; }
+
+  #keyboard { margin-top: 16px; user-select: none; }
+  .key-row { display: flex; justify-content: center; gap: 6px; margin-bottom: 8px; }
+  .key {
+    flex: 1; max-width: 43px; height: 58px;
+    border: none; border-radius: 4px; background: var(--key); color: var(--text);
+    font-size: 1rem; font-weight: bold; text-transform: uppercase; cursor: pointer;
+    padding: 0; transition: background 0.2s;
+  }
+  .key.wide { max-width: 66px; flex: 1.5; font-size: 0.75rem; }
+  .key.correct { background: var(--correct); }
+  .key.present { background: var(--present); }
+  .key.absent  { background: var(--absent); }
+  .spacer { flex: 0.5; }
+
+  #toast {
+    position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; gap: 8px; align-items: center;
+    pointer-events: none; z-index: 10;
+  }
+  .toast-msg {
+    background: var(--text); color: var(--bg); padding: 12px 16px;
+    border-radius: 4px; font-weight: bold; transition: opacity 0.3s;
+  }
+
+  #modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: none; align-items: center; justify-content: center; z-index: 20;
+  }
+  #modal.show { display: flex; }
+  .modal-box {
+    background: #1e1e1f; border: 1px solid var(--border); border-radius: 8px;
+    padding: 24px; width: min(360px, 90vw); text-align: center;
+  }
+  .modal-box h2 { margin-top: 0; }
+  .stats { display: flex; justify-content: space-around; margin: 16px 0; }
+  .stat .num { font-size: 1.8rem; font-weight: bold; }
+  .stat .lbl { font-size: 0.7rem; }
+  .dist { text-align: left; margin: 12px 0; }
+  .dist-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; font-size: 0.85rem; }
+  .dist-bar {
+    background: var(--absent); padding: 2px 6px; text-align: right;
+    min-width: 20px; font-weight: bold;
+  }
+  .dist-bar.hl { background: var(--correct); }
+  .modal-box button {
+    background: var(--correct); color: #fff; border: none; border-radius: 4px;
+    padding: 12px 24px; font-size: 1rem; font-weight: bold; cursor: pointer; margin: 4px;
+  }
+  .modal-box button.secondary { background: var(--key); }
+
+  @keyframes pop { 50% { transform: scale(1.1); } }
+  @keyframes flip {
+    0% { transform: rotateX(0); }
+    50% { transform: rotateX(90deg); }
+    100% { transform: rotateX(0); }
+  }
+  @keyframes shake {
+    10%, 90% { transform: translateX(-1px); }
+    20%, 80% { transform: translateX(2px); }
+    30%, 50%, 70% { transform: translateX(-4px); }
+    40%, 60% { transform: translateX(4px); }
+  }
+  @keyframes bounce {
+    0%, 20% { transform: translateY(0); }
+    40% { transform: translateY(-30px); }
+    50% { transform: translateY(5px); }
+    60% { transform: translateY(-15px); }
+    80% { transform: translateY(2px); }
+    100% { transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <button id="statsBtn">Stats</button>
+  <h1>WORDLE</h1>
+  <button id="newBtn">New Game</button>
+</header>
+
+<div id="toast"></div>
+
+<main id="game">
+  <div id="board"></div>
+  <div id="keyboard"></div>
+</main>
+
+<div id="modal">
+  <div class="modal-box">
+    <h2 id="modalTitle">Statistics</h2>
+    <div id="modalAnswer"></div>
+    <div class="stats">
+      <div class="stat"><div class="num" id="sPlayed">0</div><div class="lbl">Played</div></div>
+      <div class="stat"><div class="num" id="sWin">0</div><div class="lbl">Win %</div></div>
+      <div class="stat"><div class="num" id="sStreak">0</div><div class="lbl">Current Streak</div></div>
+      <div class="stat"><div class="num" id="sMax">0</div><div class="lbl">Max Streak</div></div>
+    </div>
+    <h3>Guess Distribution</h3>
+    <div class="dist" id="dist"></div>
+    <button id="playAgainBtn">Play Again</button>
+    <button id="closeBtn" class="secondary">Close</button>
+  </div>
+</div>
+
+<script>
+// ---------- Word lists ----------
+// ANSWERS: possible secret words. Any of these (plus EXTRA_GUESSES) are accepted as guesses.
+const ANSWERS = `
+about above abuse actor acute admit adopt adult after again agent agree ahead alarm album alert alike alive allow alone
+along alter among anger angle angry apart apple apply arena argue arise array aside asset audio audit avoid award aware
+badly baker bases basic basis beach began begin begun being below bench birth black blame blind block blood board
+boost booth bound brain brand bread break breed brief bring broad broke brown build built buyer cable carry catch
+cause chain chair chart chase cheap check chest chief child chose civil claim class clean clear click clock close
+coach coast could count court cover craft crash cream crime cross crowd crown curve cycle daily dance dated dealt death
+debut delay depth doing doubt dozen draft drama drawn dream dress drill drink drive drove dying eager early earth eight
+elite empty enemy enjoy enter entry equal error event every exact exist extra faith false fault fiber field fifth fifty
+fight final first fixed flash fleet floor fluid focus force forth forty forum found frame frank fraud fresh front fruit
+fully funny giant given glass globe going grace grade grand grant grass great green gross group grown guard guess guest
+guide happy heart heavy hence horse hotel house human ideal image index inner input issue joint judge known label
+large laser later laugh layer learn lease least leave legal level light limit links lives local logic loose lower lucky
+lunch lying magic major maker march match maybe mayor meant media metal might minor minus mixed model money month moral
+motor mount mouse mouth movie music needs never newly night noise north noted novel nurse occur ocean offer often order
+other ought paint panel paper party peace phase phone photo piece pilot pitch place plain plane plant plate point pound
+power press price pride prime print prior prize proof proud prove queen quick quiet quite radio raise range rapid ratio
+reach ready refer right rival river robin rough round route royal rural scale scene scope score sense serve seven shall
+shape share sharp sheet shelf shell shift shirt shock shoot short shown sight since sixth sixty sized skill sleep slide
+small smart smile smoke solid solve sorry sound south space spare speak speed spend spent split spoke sport staff
+stage stake stand start state steam steel stick still stock stone stood store storm story strip stuck study stuff style
+sugar suite super sweet table taken taste taxes teach teeth thank theft their theme there these thick thing think third
+those three threw throw tight times tired title today topic total touch tough tower track trade train treat trend trial
+tried tries truck truly trust truth twice under undue union unity until upper upset urban usage usual valid value video
+virus visit vital voice waste watch water wheel where which while white whole whose woman women world worry worse worst
+worth would wound write wrong wrote yield young youth
+acorn adore agile aisle amber angel ankle apron arrow atlas bacon badge bagel baton beard beast berry bison blaze blend
+bliss bloom blush boast bonus brave brick bride brisk broom brush bunch burst cabin camel candy canoe cargo cedar chalk
+charm cheer chess chick chili chirp choir cider cinch clamp clash claws cliff climb cloak cloud clown coral couch crane
+crate crisp crumb crush curly daisy dough dwarf eagle easel elbow ember fable feast fetch fever flame flask flock flute
+foggy forge frost fudge ghost glide gloom glove grape gravy grill grind groan guava habit haunt hazel honey hover igloo
+ivory jelly jewel joker juice jumbo kayak knack kneel knife koala lemon liver llama lodge lunar mango maple marsh medal
+melon mirth mocha moose mossy mound nacho nerve ninja noble nudge oasis olive onion orbit otter owner panda pasta patch
+pearl pecan penny perch piano pinch pixel pizza plaza plume polar poppy porch prank prism puppy quail quilt quirk quota
+radar raven relax rhyme ridge risky roast robot rocky rodeo rumor salad salsa sauce scarf scout shade shark sheep shiny
+skate skunk slate slope snack snail snake sneak spice spine spoon squad stamp stare stork stove straw sunny swamp swift
+sword syrup tango teddy thorn tiger toast token topaz torch trail tulip tweet ultra umbra uncle unzip vapor vault venom
+vivid vocal wagon waltz whale wheat whisk witty wreck yacht yeast zebra zesty
+aback abbey abide abort acids adapt adept alien align alley allot aloft aloud alpha altar amaze amend ample amuse anime
+annex annoy aptly arbor armor aroma arson ashen askew attic avert awake awful axiom azure balmy banjo barge baron basil
+basin batch bathe bayou beady beefy beige belly beret bible binge birch blade bland blank blast bleak bleed blimp blink
+blond blown bluff blunt blurb blurt bogus bongo bossy boxer brace braid brake brass brawl briar brine brink broth brute
+buddy budge buggy bugle bulky bully bumpy bunny burly bushy cacao cadet canal caper carol carve cater cease chaos chard
+cheek chewy chime chimp chore chunk churn cigar civic clasp clerk cling cloth clove clump cobra cocoa colon comet comic
+comma conch corny cough coupe covet crack cramp crank crawl craze crazy creak creek creep crepe crest cried crook crust
+cubic cumin curry curse cyber dairy dandy decay decor decoy deity delta demon denim dense depot derby deter detox devil
+diary digit diner dingy dirty disco ditch ditto diver dizzy dodge dogma dolly donor donut dopey drain drake drape dread
+dried drift drool droop drown dryer dummy dunce dusky dusty duvet eaten ebony eerie eject elder elect elope elude email
+embed emote endow ensue envoy epoch equip erase erode erupt essay ethic evade evict excel exert exile expel exude facet
+fairy fancy farce fatal feign feral ferry fiery filth finch fishy flair flake flaky flank flare flesh flick fling flint
+flirt float flood flora floss flour flown fluff fluke flung flush foamy folly foray forte foyer frail freak fried frill
+frisk frizz frond froze fungi funky furry fussy fuzzy gaffe gamer gamma gamut gaudy gauge gaunt gauze gavel gecko geese
+genie genre giddy gleam glean glint gloat gloss gnome goner goody gooey goofy goose gorge gouge gourd graft grain grasp
+grate graze greed greet grief gripe growl gruel gruff grunt guilt guise gully gumbo gummy guppy gusto gusty hairy halve
+handy hardy harsh hasty hatch haven havoc heady heave hedge hefty heist helix hello heron hilly hinge hippo hitch hoard
+hobby hoist holly honor horde hotly hound howdy humid humor hunch hurry husky hutch hyena hyper icing idiom idiot idyll
+imply inane inbox incur inept inert infer ingot inlet irate irony itchy jaunt jazzy jeans jerky jetty jiffy jolly joust
+jumpy juror karma kebab khaki kiosk kitty knead knelt knock knoll labor laden ladle lager lance lanky lapel lapse larva
+lasso latch latte leafy leaky leapt ledge leech leery lefty lemur lilac limbo liner lingo lithe lofty loopy lotus lousy
+lover lowly loyal lucid lumpy lunge lurch lyric macaw macho madam magma mambo manga mania manic manor marry mason mauve
+maxim meaty medic merge merit merry messy midst mimic mince miner minty miser moist molar moldy moody motel motif motto
+mourn mover mower muddy mulch mummy mural murky mushy musty nadir naive nanny nasal nasty naval navel needy neigh nerdy
+nicer niche niece nifty ninth nomad notch nutty nylon obese omega opera optic organ ounce outdo outer ovary overt owing
+oxide ozone pagan pansy parka parry parse pasty patio patty pause peach pedal penal perky pesky petal petty phony piety
+piggy pinky pious piper pithy pivot pixie plank plead pleat pluck plumb plump plunk plush poach poise poker polka posse
+pouch pouty prawn preen prone prong prose prowl proxy prude prune psalm pudgy puffy pulse punch pupil puree purge purse
+pushy putty quack qualm quart quash query quest queue quote rabbi rabid racer rainy rally ramen ranch raspy razor realm
+rebel rebus recap regal rehab reign relic renew repay repel reply rerun resin retro retry reuse revel rhino rifle rigid
+rinse ripen risen rival roach rogue roomy roost rotor rouge rowdy ruddy ruler rumba rusty sadly saint salon salty salve
+sandy sassy satin saucy sauna savor savvy scald scalp scaly scamp scant scare scary scoff scold scone scoop scorn scour
+scowl scram scrap scrub scuba sedan seedy seize sepia serum setup sever shack shaft shaky shame shear sheen sheer shine
+shore shove showy shrub shrug shunt sieve silky silly sinew singe siren skier skimp skirt skull slack slain slang slant
+slash sleek sleet slept slick slime slimy sling sloth slump slurp slush smack smash smear smell smirk smock snare snarl
+sneer snide sniff snipe snoop snore snort snout snowy snuck sober soggy solar sonic sooty soupy spade spark spasm spawn
+spear speck spell spied spike spiky spill spiny spire spite splat spoof spook spool spore spout spray spree sprig spurt
+squat stack stain stair stale stalk stall stash steak steal steed steep steer stern stiff sting stink stoic stomp stony
+stool stoop stout strap stray strut stump stung stunk stunt suave sulky surge surly sushi swarm swear sweat sweep swell
+swept swine swing swirl swoop tabby taboo tacky taffy taint talon tangy tapir tardy tarot tasty taunt tawny tease tempo
+tenor tense tenth tepid terse testy thief thigh thumb thump thyme tiara tidal timer timid tipsy titan tonic tooth torso
+totem toxic trace tract trait tramp trash trawl tread tribe trick trite troll troop trout trove truce trump trunk tubby
+tuber tumor tunic turbo tutor twang tweak tweed twine twirl twist udder ulcer unfit unify unite untie usher utter vague
+valet valor valve vegan venue verge verse vigil vigor villa vinyl viola viper viral visor vista vodka vogue voter vouch
+vowel wacky wafer wager waist waive waver weary weave wedge weedy weigh weird whack whiff whine whirl widen widow width
+wield wimpy wince winch windy wiser wispy witch woken woody woozy wordy wrath wrist yearn yodel yummy
+`.trim().split(/\s+/).filter((w, i, a) => /^[a-z]{5}$/.test(w) && a.indexOf(w) === i);
+
+// Extra valid guesses that won't be chosen as answers (common starters etc.)
+const EXTRA_GUESSES = `
+adieu arise audio crane slate stare raise roate soare trace crate salet least tears rates aster later alert irate arose
+teary tales steal react caret carte heart earth hater leant learn renal snare saner rinse siren tries tires rites tiers
+aloes stole notes tones stone onset seton cones scone lanes slain snail nails plain plait split spilt spoil ponds pound
+mound hound bound wound sound round found count mount fount pouts spout stout shout about ghoul would could hello world
+cares races scare acres crest chest guest quest dunce ounce bunch lunch hunch punch munch mulch gulch belch welch lymph
+nymph glyph crypt tryst gypsy pygmy jazzy fizzy dizzy fuzzy buzzy happy sappy nappy puppy poppy peppy soggy baggy leafy
+wordy words sword lords roads broad board hoard adore oread drone prone phone shone stoke spoke choke broke smoke evoke
+acted added aided aimed aired ached ailed asked atoms aunts backs bails baits bakes balls bands banks barks barns baths
+beams beans bears beats beefs beers bells belts bends bikes bills binds birds bites blows boats bolts bombs bones books
+boots bored bores bowls boxes brags brews bulbs bulls bumps burns buses busts calls calms camps cards cares carts cases
+casts cells chips chops cited cites clubs clues coats codes coins colds cones cooks cools cords cores costs crabs crews
+crops cubes cuffs cures dared dares darts dates deals debts decks deeds dials diets dimes dines dives docks dolls domes
+doors doses doves downs drags draws drops drums ducks duels dukes dumps dunes dusts earns eases edges edits ended exams
+exits faced faces facts fades fails fairs fakes falls fared fares farms fears feeds feels ferns files fills films finds
+fines fired fires firms fists fixes flags flaps flats flaws fleas flies flips flows foams foils folds folks fonts foods
+fools forks forms forts foxes frogs fuels fumes funds fuses gains gales games gangs gates gazed gazes gears gifts girls
+gives glows glued glues goals goats gowns grabs grins grips grows gulls gusts hacks hails hairs halls halts hands hangs
+harms hated hates hauls hawks heads heals heaps hears heats heels helps herbs herds hides hikes hills hints hired hires
+holds holes homes hoods hooks hoops hoped hopes horns hoses hosts hours howls hunts hurts icons ideas irons items jails
+jeers joins jokes jumps kicks kills kinds kings kites knees knits knobs knots lacks lakes lambs lamps lands lanes lasts
+leads leaks leaps lends liars licks lifts liked likes limbs lines lions lists lived loads loans locks lofts logos looks
+loops loses loved loves lungs lures lurks mails makes males malls manes marks masks mates meals means meats meets melts
+menus miles milks mills minds mines mints mists mixes moans moats modes molds moles moods moons moped moves mules myths
+nails names necks nests nines notes nouns oaths obeys odors oiled opens opted owned pacts pages pails pains pairs palms
+pants parks parts paths paved paves pawns peaks peels peers pests picks piles pills pines pints pipes plans plays plots
+plugs plums poems poets poked poles polls pools pores ports posed poses posts pours prays preys pries pulls pumps quits
+racks rafts rages raids rails rains rakes ramps rants rated reads rears reeds reefs reels rents rests rides rings riots
+rises risks roams roars robes rocks rolls roofs rooms roots ropes roses rules ruins rungs rusts sacks safes sails sales
+salts sands saved saves scans seals seams seats seeds seeks seems sells sends shoes shops shots shows sides signs silks
+sings sinks sites sizes skies skins skips slabs slams slaps sleds slips slits slots slows slugs snaps snows soaks soaps
+socks sofas soils solos songs sorts souls soups spans spins spots spurs stabs stars stays stems steps stirs stops studs
+suits swaps swims tacos tails takes talks tanks tapes tasks teams tells tends tents terms tests texts thaws ticks tides
+tiles tilts tools tours towns trays trees trims trips tubes tunes turns tusks twins types urged urges users vases veils
+veins vents views vines visas voted votes waded wages waits wakes walks walls wands wants wards warms warns waves weeks
+wells whips wicks wider winds wines wings wipes wires woods words works worms wraps yards yarns years yells zeros zones
+aloes ardor arose ashes asset elegy ennui exalt extol filly forgo frock golly godly harem idler imbue impel inlay islet
+knave libel lipid mange manly mealy myrrh newer nobly octet offal olden opine orate outgo ovate pique poesy primo rarer
+reedy remit ripen riper riser salvo satyr saute shirk shorn shush sissy skiff slink sloop slosh slung slunk slyly smelt
+smite snuff sooth spank spiel spilt spunk spurn squib staid stank stead stint stoke surer swami swath swill swoon tacit
+tamer tatty tenet tilde toady tonal triad trope truss tuner twerp unwed usurp vapid vaunt vixen wanly warty waxen whelp
+whiny whoop wooer zonal
+`.trim().split(/\s+/).filter(w => /^[a-z]{5}$/.test(w));
+
+const VALID = new Set([...ANSWERS, ...EXTRA_GUESSES]);
+
+// ---------- State ----------
+const ROWS = 6, COLS = 5, FLIP_MS = 300;
+let answer, guesses, current, gameOver, busy;
+
+const boardEl = document.getElementById('board');
+const kbEl = document.getElementById('keyboard');
+const toastEl = document.getElementById('toast');
+const modal = document.getElementById('modal');
+
+// ---------- Build board & keyboard ----------
+function buildBoard() {
+  boardEl.innerHTML = '';
+  for (let r = 0; r < ROWS; r++) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    for (let c = 0; c < COLS; c++) {
+      const t = document.createElement('div');
+      t.className = 'tile';
+      row.appendChild(t);
+    }
+    boardEl.appendChild(row);
+  }
+}
+
+function buildKeyboard() {
+  const layout = ['qwertyuiop', ' asdfghjkl ', '+zxcvbnm-'];
+  kbEl.innerHTML = '';
+  for (const line of layout) {
+    const row = document.createElement('div');
+    row.className = 'key-row';
+    for (const ch of line) {
+      if (ch === ' ') { const s = document.createElement('div'); s.className = 'spacer'; row.appendChild(s); continue; }
+      const k = document.createElement('button');
+      k.className = 'key';
+      if (ch === '+') { k.textContent = 'Enter'; k.dataset.key = 'Enter'; k.classList.add('wide'); }
+      else if (ch === '-') { k.textContent = '⌫'; k.dataset.key = 'Backspace'; k.classList.add('wide'); }
+      else { k.textContent = ch; k.dataset.key = ch; }
+      row.appendChild(k);
+    }
+    kbEl.appendChild(row);
+  }
+}
+
+// ---------- Game flow ----------
+function newGame() {
+  answer = ANSWERS[Math.floor(Math.random() * ANSWERS.length)];
+  guesses = [];
+  current = '';
+  gameOver = false;
+  busy = false;
+  buildBoard();
+  buildKeyboard();
+  modal.classList.remove('show');
+}
+
+function handleKey(key) {
+  if (gameOver || busy) return;
+  if (key === 'Enter') return submitGuess();
+  if (key === 'Backspace') {
+    current = current.slice(0, -1);
+    return renderCurrent();
+  }
+  if (/^[a-zA-Z]$/.test(key) && current.length < COLS) {
+    current += key.toLowerCase();
+    renderCurrent();
+  }
+}
+
+function renderCurrent() {
+  const tiles = boardEl.children[guesses.length].children;
+  for (let i = 0; i < COLS; i++) {
+    tiles[i].textContent = current[i] || '';
+    tiles[i].classList.toggle('filled', !!current[i]);
+  }
+}
+
+// Scores a guess with correct handling of duplicate letters.
+function score(guess, target) {
+  const result = Array(COLS).fill('absent');
+  const counts = {};
+  for (let i = 0; i < COLS; i++) {
+    if (guess[i] === target[i]) result[i] = 'correct';
+    else counts[target[i]] = (counts[target[i]] || 0) + 1;
+  }
+  for (let i = 0; i < COLS; i++) {
+    if (result[i] !== 'correct' && counts[guess[i]] > 0) {
+      result[i] = 'present';
+      counts[guess[i]]--;
+    }
+  }
+  return result;
+}
+
+function submitGuess() {
+  const rowEl = boardEl.children[guesses.length];
+  if (current.length < COLS) return reject(rowEl, 'Not enough letters');
+  if (!VALID.has(current)) return reject(rowEl, 'Not in word list');
+
+  const guess = current;
+  const result = score(guess, answer);
+  guesses.push(guess);
+  current = '';
+  busy = true;
+
+  [...rowEl.children].forEach((tile, i) => {
+    setTimeout(() => {
+      tile.classList.add('flip');
+      setTimeout(() => tile.classList.add(result[i]), 250);
+    }, i * FLIP_MS);
+  });
+
+  setTimeout(() => {
+    updateKeyboard(guess, result);
+    busy = false;
+    if (guess === answer) {
+      gameOver = true;
+      [...rowEl.children].forEach((t, i) => setTimeout(() => t.classList.add('win'), i * 100));
+      const praise = ['Genius', 'Magnificent', 'Impressive', 'Splendid', 'Great', 'Phew'];
+      toast(praise[guesses.length - 1], 1800);
+      recordResult(true, guesses.length);
+      setTimeout(() => showStats('You win!'), 2000);
+    } else if (guesses.length === ROWS) {
+      gameOver = true;
+      toast(answer.toUpperCase(), 2500);
+      recordResult(false);
+      setTimeout(() => showStats('Game over'), 2000);
+    }
+  }, COLS * FLIP_MS + 250);
+}
+
+function reject(rowEl, msg) {
+  toast(msg);
+  rowEl.classList.remove('shake');
+  void rowEl.offsetWidth; // restart animation
+  rowEl.classList.add('shake');
+}
+
+function updateKeyboard(guess, result) {
+  const rank = { absent: 0, present: 1, correct: 2 };
+  for (let i = 0; i < COLS; i++) {
+    const k = kbEl.querySelector(`[data-key="${guess[i]}"]`);
+    const prev = ['correct', 'present', 'absent'].find(c => k.classList.contains(c));
+    if (!prev || rank[result[i]] > rank[prev]) {
+      k.classList.remove('correct', 'present', 'absent');
+      k.classList.add(result[i]);
+    }
+  }
+}
+
+function toast(msg, ms = 1200) {
+  const el = document.createElement('div');
+  el.className = 'toast-msg';
+  el.textContent = msg;
+  toastEl.prepend(el);
+  setTimeout(() => { el.style.opacity = 0; setTimeout(() => el.remove(), 300); }, ms);
+}
+
+// ---------- Stats (saved in localStorage) ----------
+function loadStats() {
+  try {
+    return JSON.parse(localStorage.getItem('wordle-stats')) || null;
+  } catch { return null; }
+}
+function getStats() {
+  return loadStats() || { played: 0, wins: 0, streak: 0, maxStreak: 0, dist: [0,0,0,0,0,0] };
+}
+function recordResult(won, n) {
+  const s = getStats();
+  s.played++;
+  if (won) {
+    s.wins++; s.streak++; s.maxStreak = Math.max(s.maxStreak, s.streak); s.dist[n - 1]++;
+  } else {
+    s.streak = 0;
+  }
+  try { localStorage.setItem('wordle-stats', JSON.stringify(s)); } catch {}
+  s.last = won ? n : null;
+  return s;
+}
+
+function showStats(title = 'Statistics') {
+  const s = getStats();
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalAnswer').textContent =
+    gameOver ? `The word was ${answer.toUpperCase()}` : '';
+  document.getElementById('sPlayed').textContent = s.played;
+  document.getElementById('sWin').textContent = s.played ? Math.round(100 * s.wins / s.played) : 0;
+  document.getElementById('sStreak').textContent = s.streak;
+  document.getElementById('sMax').textContent = s.maxStreak;
+  const max = Math.max(1, ...s.dist);
+  const won = gameOver && guesses[guesses.length - 1] === answer;
+  document.getElementById('dist').innerHTML = s.dist.map((v, i) => `
+    <div class="dist-row"><span>${i + 1}</span>
+      <div class="dist-bar ${won && guesses.length === i + 1 ? 'hl' : ''}" style="width:${Math.max(8, 100 * v / max)}%">${v}</div>
+    </div>`).join('');
+  modal.classList.add('show');
+}
+
+// ---------- Events ----------
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (modal.classList.contains('show')) {
+    if (e.key === 'Escape') modal.classList.remove('show');
+    return;
+  }
+  handleKey(e.key);
+});
+kbEl.addEventListener('click', e => {
+  const k = e.target.closest('.key');
+  if (k) { handleKey(k.dataset.key); k.blur(); }
+});
+document.getElementById('newBtn').addEventListener('click', e => { e.target.blur(); newGame(); });
+document.getElementById('statsBtn').addEventListener('click', e => { e.target.blur(); showStats(); });
+document.getElementById('playAgainBtn').addEventListener('click', newGame);
+document.getElementById('closeBtn').addEventListener('click', () => modal.classList.remove('show'));
+modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('show'); });
+
+newGame();
+</script>
+</body>
+</html>
